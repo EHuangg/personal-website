@@ -1,7 +1,7 @@
 import { prisma } from "./prisma"
 
-const DAILY_LIMIT = 1
-const WEEKLY_LIMIT = 3
+const DAILY_LIMIT = 9999
+const WEEKLY_LIMIT = 9999
 
 export async function checkCooldown(fingerprintHash: string): Promise<{
   allowed: boolean
