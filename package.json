@@ -1,0 +1,14 @@
+{
+  "name": "personal-website",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:personal": "npm run dev --workspace=apps/personal",
+    "dev:community": "npm run dev --workspace=apps/community",
+    "build:personal": "npm run build --workspace=apps/personal",
+    "build:community": "npm run build --workspace=apps/community"
+  }
+}
