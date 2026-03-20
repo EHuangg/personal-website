@@ -265,8 +265,12 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-main); 
 }
 
 .tag:hover { color: var(--ink); border-color: var(--ink-muted); }
-.tag--active { color: var(--ink); border-color: var(--ink); }
-.tag--dimmed { opacity: 0.25; }
+.tag--active {
+  color: var(--ink);
+  background: var(--ink-faint);
+  border-color: var(--ink-faint);
+}
+.tag--dimmed { opacity: 1; }
 .tag-icon { display: inline-flex; align-items: center; width: 12px; height: 12px; flex-shrink: 0; }
 .tag-icon svg { width: 12px; height: 12px; }
 

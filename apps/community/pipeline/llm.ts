@@ -104,8 +104,9 @@ Guidelines:
 - addContent = adding something new → preserveExisting: true
 - removeContent = removing things → preserveExisting: true
 - embed = adding YouTube/image → preserveExisting: true
-- reset = start completely fresh → preserveExisting: false, resetContext: true
-- If user says "remove everything" / "start over" / "blank" / "fresh" → reset
+- reset = completely new visual style/theme → preserveExisting: false, resetContext: true
+- NOTE: even on reset, all of Evan's real content must appear — reset means the design/style starts fresh, not the content
+- If user says "remove everything" / "start over" / "blank" / "fresh" → reset (style only)
 - generatorInstruction should be rich and detailed`
 
   const messages = [
@@ -166,6 +167,19 @@ CAPABILITIES — use freely:
 HARD RULES:
 - No <video> or <audio> tags
 - No markdown fences — ONLY the raw HTML document
+
+MANDATORY CONTENT — this information must appear on every page, no exceptions:
+- Evan Huang's name, prominently displayed
+- His bio: Mathematics graduate from University of Waterloo, software development and network infrastructure experience
+- Both work experiences: BlackBerry and Compugen with roles and dates
+- All three projects: this website, Live Subtitles, Yamagotchi — each with a link to its GitHub URL
+- Contact links: github.com/EHuangg, evan.hu.huang@gmail.com, linkedin.com/in/evan-huang-187116179
+- A link to download his resume at /Evan_Huang_Resume.pdf
+
+You may present this content in ANY creative way — a terminal, a newspaper, a sports card, a NASA dashboard, a retro game UI, an art gallery, anything. The style and layout is completely up to you. But all the content must be there and all links must be real working URLs.
+
+DO NOT invent fake projects, fake companies, fake links, or placeholder "lorem ipsum" content. Every piece of text must be real.
+LINKS: Only use real external URLs. Never link to internal subpages like /projects, /contact, /about — this is a single page app and those routes don't exist. All buttons and links must point to real external URLs (GitHub, LinkedIn, email, etc.) or do nothing (href="#").
 
 Respond with ONLY the complete HTML document. Nothing else.`
 

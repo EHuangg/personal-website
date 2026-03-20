@@ -24,7 +24,7 @@ type SubmitState =
   | { status: "success"; liveDate: string; position: number }
   | { status: "error"; message: string }
 
-function ProtectedBar() {
+function ProtectedBar({ isDefault }: { isDefault: boolean }) {
   const [prompt, setPrompt] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [submitState, setSubmitState] = useState<SubmitState>({ status: "idle" })
@@ -74,14 +74,17 @@ function ProtectedBar() {
       <div className="protected-bar-inner">
 
         {/* Left: personal site link */}
-        <a
-          href={siteConfig.links.github}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="bar-personal-link"
-        >
-          evan huang ↗
-        </a>
+        {!isDefault && (
+          <a
+            href="https://www.evan-huang.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bar-personal-link"
+          >
+            evan's original page ↗
+          </a>
+        )}
+        {isDefault && <span className="bar-personal-link" style={{ visibility: "hidden" }}>placeholder</span>}
 
         {/* Center: queue indicator */}
         <div className="bar-queue-wrap">
@@ -113,7 +116,7 @@ function ProtectedBar() {
           className="bar-rewrite-btn"
           onClick={() => { setFormOpen((o) => !o); setSubmitState({ status: "idle" }) }}
         >
-          {formOpen ? "close" : "rewrite this site →"}
+          {formOpen ? "close ✕" : "this page too boring?"}
         </button>
       </div>
 
@@ -131,7 +134,7 @@ function ProtectedBar() {
             <div className="bar-form">
               <textarea
                 className="bar-textarea"
-                placeholder="make it dark mode / add a giant elephant / redesign as a retro terminal..."
+                placeholder="rebuild this site for me, start prompting..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 maxLength={500}
@@ -184,7 +187,7 @@ export default function Home() {
 
   return (
     <>
-      <ProtectedBar />
+      <ProtectedBar isDefault={!hasContent} />
       {loading ? (
         <div style={{ padding: "4rem 2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#9a8a72" }}>
           loading...
@@ -221,10 +224,11 @@ const tagIcons: Record<string, string> = {
   "Bash":        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>`,
 }
 
-function Tags({ tags, activeTag, onTagClick }: {
+function Tags({ tags, activeTag, onTagClick, tagCounts }: {
   tags: string[]
   activeTag: string | null
   onTagClick: (tag: string) => void
+  tagCounts: Record<string, number>
 }) {
   return (
     <div className="tags">
@@ -233,6 +237,7 @@ function Tags({ tags, activeTag, onTagClick }: {
           key={tag}
           className={`tag ${activeTag === tag ? "tag--active" : ""} ${activeTag !== null && activeTag !== tag ? "tag--dimmed" : ""}`}
           onClick={() => onTagClick(tag)}
+          title={`${tagCounts[tag] ?? 1} occurrence${(tagCounts[tag] ?? 1) === 1 ? "" : "s"}`}
         >
           {tagIcons[tag] && (
             <span className="tag-icon" dangerouslySetInnerHTML={{ __html: tagIcons[tag] }} />
@@ -244,10 +249,11 @@ function Tags({ tags, activeTag, onTagClick }: {
   )
 }
 
-function Job({ job, activeTag, onTagClick }: {
+function Job({ job, activeTag, onTagClick, tagCounts }: {
   job: typeof siteConfig.experience[0]
   activeTag: string | null
   onTagClick: (tag: string) => void
+  tagCounts: Record<string, number>
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -266,7 +272,7 @@ function Job({ job, activeTag, onTagClick }: {
         <ul className="job-points">
           {job.points.map((pt, i) => <li key={i}>{pt}</li>)}
         </ul>
-        <Tags tags={job.tags} activeTag={activeTag} onTagClick={onTagClick} />
+        <Tags tags={job.tags} activeTag={activeTag} onTagClick={onTagClick} tagCounts={tagCounts} />
       </div>
     </div>
   )
@@ -277,6 +283,19 @@ function DefaultSite() {
 
   function handleTagClick(tag: string) {
     setActiveTag((prev) => (prev === tag ? null : tag))
+  }
+
+  // Count occurrences of each tag across all experience and projects
+  const tagCounts: Record<string, number> = {}
+  for (const job of siteConfig.experience) {
+    for (const tag of job.tags) {
+      tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
+    }
+  }
+  for (const project of siteConfig.projects) {
+    for (const tag of project.tags) {
+      tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
+    }
   }
 
   return (
@@ -301,7 +320,7 @@ function DefaultSite() {
           <p className="section-label">experience</p>
           <div className="experience-list">
             {siteConfig.experience.map((job) => (
-              <Job key={job.company} job={job} activeTag={activeTag} onTagClick={handleTagClick} />
+              <Job key={job.company} job={job} activeTag={activeTag} onTagClick={handleTagClick} tagCounts={tagCounts} />
             ))}
           </div>
         </section>
@@ -315,7 +334,7 @@ function DefaultSite() {
                   {project.name} ↗
                 </a>
                 <p className="project-desc">{project.description}</p>
-                <Tags tags={project.tags} activeTag={activeTag} onTagClick={handleTagClick} />
+                <Tags tags={project.tags} activeTag={activeTag} onTagClick={handleTagClick} tagCounts={tagCounts} />
               </div>
             ))}
           </div>
