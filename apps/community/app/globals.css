@@ -249,7 +249,24 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-main); 
 .project-name:hover { color: var(--ink-light); }
 .project-desc { font-size: 0.82rem; color: var(--ink-light); line-height: 1.7; margin-top: 0.25rem; }
 .tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-.tag { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.68rem; font-family: var(--font-main); letter-spacing: 0.08em; color: var(--ink-muted); border: 1px solid var(--ink-faint); padding: 0.15rem 0.5rem; }
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-family: var(--font-main);
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  border: 1px solid var(--ink-faint);
+  padding: 0.15rem 0.5rem;
+  background: none;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+.tag:hover { color: var(--ink); border-color: var(--ink-muted); }
+.tag--active { color: var(--ink); border-color: var(--ink); }
+.tag--dimmed { opacity: 0.25; }
 .tag-icon { display: inline-flex; align-items: center; width: 12px; height: 12px; flex-shrink: 0; }
 .tag-icon svg { width: 12px; height: 12px; }
 

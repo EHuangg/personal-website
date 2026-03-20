@@ -113,7 +113,7 @@ function ProtectedBar() {
           className="bar-rewrite-btn"
           onClick={() => { setFormOpen((o) => !o); setSubmitState({ status: "idle" }) }}
         >
-          {formOpen ? "close" : "Find this website boring? rewrite it ->"}
+          {formOpen ? "close" : "rewrite this site →"}
         </button>
       </div>
 
@@ -221,22 +221,34 @@ const tagIcons: Record<string, string> = {
   "Bash":        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>`,
 }
 
-function Tags({ tags }: { tags: string[] }) {
+function Tags({ tags, activeTag, onTagClick }: {
+  tags: string[]
+  activeTag: string | null
+  onTagClick: (tag: string) => void
+}) {
   return (
     <div className="tags">
       {tags.map((tag) => (
-        <span key={tag} className="tag">
+        <button
+          key={tag}
+          className={`tag ${activeTag === tag ? "tag--active" : ""} ${activeTag !== null && activeTag !== tag ? "tag--dimmed" : ""}`}
+          onClick={() => onTagClick(tag)}
+        >
           {tagIcons[tag] && (
             <span className="tag-icon" dangerouslySetInnerHTML={{ __html: tagIcons[tag] }} />
           )}
           {tag}
-        </span>
+        </button>
       ))}
     </div>
   )
 }
 
-function Job({ job }: { job: typeof siteConfig.experience[0] }) {
+function Job({ job, activeTag, onTagClick }: {
+  job: typeof siteConfig.experience[0]
+  activeTag: string | null
+  onTagClick: (tag: string) => void
+}) {
   const [open, setOpen] = useState(false)
   return (
     <div className="job">
@@ -254,13 +266,19 @@ function Job({ job }: { job: typeof siteConfig.experience[0] }) {
         <ul className="job-points">
           {job.points.map((pt, i) => <li key={i}>{pt}</li>)}
         </ul>
-        <Tags tags={job.tags} />
+        <Tags tags={job.tags} activeTag={activeTag} onTagClick={onTagClick} />
       </div>
     </div>
   )
 }
 
 function DefaultSite() {
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+
+  function handleTagClick(tag: string) {
+    setActiveTag((prev) => (prev === tag ? null : tag))
+  }
+
   return (
     <main className="paper">
       <div className="content">
@@ -282,7 +300,9 @@ function DefaultSite() {
         <section>
           <p className="section-label">experience</p>
           <div className="experience-list">
-            {siteConfig.experience.map((job) => <Job key={job.company} job={job} />)}
+            {siteConfig.experience.map((job) => (
+              <Job key={job.company} job={job} activeTag={activeTag} onTagClick={handleTagClick} />
+            ))}
           </div>
         </section>
         <hr className="divider" />
@@ -295,7 +315,7 @@ function DefaultSite() {
                   {project.name} ↗
                 </a>
                 <p className="project-desc">{project.description}</p>
-                <Tags tags={project.tags} />
+                <Tags tags={project.tags} activeTag={activeTag} onTagClick={handleTagClick} />
               </div>
             ))}
           </div>
