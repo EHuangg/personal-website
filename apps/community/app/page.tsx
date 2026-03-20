@@ -113,7 +113,7 @@ function ProtectedBar() {
           className="bar-rewrite-btn"
           onClick={() => { setFormOpen((o) => !o); setSubmitState({ status: "idle" }) }}
         >
-          {formOpen ? "close" : "rewrite this site →"}
+          {formOpen ? "close" : "Find this website boring? rewrite it ->"}
         </button>
       </div>
 
@@ -179,7 +179,8 @@ export default function Home() {
       .catch(() => setLoading(false))
   }, [])
 
-  const showDefault = !snapshot || snapshot.isDefault || !snapshot.htmlContent
+  // Show default only when there is genuinely no community build ever
+  const hasContent = snapshot && !snapshot.isDefault && snapshot.htmlContent
 
   return (
     <>
@@ -188,13 +189,15 @@ export default function Home() {
         <div style={{ padding: "4rem 2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#9a8a72" }}>
           loading...
         </div>
-      ) : showDefault ? (
-        <DefaultSite />
-      ) : (
-        <div
-          className="community-render"
-          dangerouslySetInnerHTML={{ __html: snapshot!.htmlContent }}
+      ) : hasContent ? (
+        <iframe
+          className="community-iframe"
+          srcDoc={snapshot!.htmlContent}
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          title="community site"
         />
+      ) : (
+        <DefaultSite />
       )}
     </>
   )

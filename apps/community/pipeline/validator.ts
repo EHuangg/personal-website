@@ -1,10 +1,10 @@
-const BLOCKED_TAGS = ["script", "object", "base", "meta", "link", "video", "audio"]
+const BLOCKED_TAGS = ["object", "base", "video", "audio"]
 
 function wrapIframes(html: string): string {
   let index = 0
   return html.replace(
     /<iframe([^>]*?)src=["']([^"']+)["']([^>]*?)(?:\/>|><\/iframe>)/gi,
-    (match, before, src, after) => {
+    (_match, _before, src, _after) => {
       const id = `iframe-wrap-${index++}`
       const domain = (() => {
         try { return new URL(src).hostname } catch { return src }
@@ -24,10 +24,10 @@ function wrapIframes(html: string): string {
 export function validateAndClean(html: string): string {
   let cleaned = html
 
-  // Strip markdown code fences
-  cleaned = cleaned.replace(/```html\n?/gi, "").replace(/```\n?/g, "")
+  // Strip markdown fences
+  cleaned = cleaned.replace(/```html\n?/gi, "").replace(/```\n?/g, "").trim()
 
-  // Remove blocked tags entirely
+  // Remove blocked tags
   for (const tag of BLOCKED_TAGS) {
     const pattern = new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi")
     const selfClosing = new RegExp(`<${tag}[^>]*/?>`, "gi")
@@ -35,17 +35,17 @@ export function validateAndClean(html: string): string {
     cleaned = cleaned.replace(selfClosing, "")
   }
 
-  // Remove on* event handlers except our own injected ones
+  // Remove on* event handlers (except our injected iframe ones)
   cleaned = cleaned.replace(/\s+on(?!click="[^"]*data-iframe)[a-z]+\s*=\s*["'][^"']*["']/gi, "")
 
   // Remove javascript: hrefs
   cleaned = cleaned.replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"')
 
-  // Wrap iframes with warning overlay
+  // Wrap iframes
   cleaned = wrapIframes(cleaned)
 
   if (cleaned.trim().length < 20) {
-    throw new Error("Generated HTML is too short or empty after cleaning")
+    throw new Error("Generated HTML is too short after cleaning")
   }
 
   return cleaned.trim()

@@ -205,8 +205,14 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-main); 
 
 .bar-success-again:hover { color: var(--ink); }
 
-/* ── Community render area ── */
-.community-render { min-height: 80vh; width: 100%; }
+/* ── Community iframe ── */
+.community-iframe {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 45px);
+  border: none;
+  background: white;
+}
 
 /* ── Default site ── */
 .paper { min-height: 80vh; display: flex; justify-content: center; padding: 3rem 1.5rem 6rem; }

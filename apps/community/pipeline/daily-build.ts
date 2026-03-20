@@ -1,54 +1,41 @@
 import { prisma } from "../lib/prisma"
 import { generatePageHTML } from "./llm"
 import { validateAndClean } from "./validator"
-import { getBaselineHTML } from "./baseline"
+import { swapImages } from "./images"
 
 export async function runDailyBuild(): Promise<{
   success: boolean
   message: string
 }> {
-  // Get the next queued submission (FIFO)
   const submission = await prisma.submission.findFirst({
     where: { status: "QUEUED" },
     orderBy: { createdAt: "asc" },
   })
 
   if (!submission) {
-    // Queue is empty — set default snapshot as current
     await ensureDefaultSnapshot()
     return { success: true, message: "Queue empty — default site is live." }
   }
 
   try {
-    // Check what's currently live
-    const currentSnapshot = await prisma.siteSnapshot.findFirst({
-      where: { isCurrent: true },
-      select: { isDefault: true, buildId: true },
+    // Always load the last successful raw HTML as context — no default/community check needed
+    const lastBuild = await prisma.build.findFirst({
+      where: { status: "SUCCESS" },
+      orderBy: { builtAt: "desc" },
+      select: { generatedPatch: true },
     })
 
-    // If current snapshot is default, use baseline — not the last build
-    const isCurrentDefault = !currentSnapshot || currentSnapshot.isDefault
-
-    const currentHTML = await (async () => {
-      if (isCurrentDefault) return getBaselineHTML()
-      // Get the raw HTML from the build linked to the current snapshot
-      if (currentSnapshot?.buildId) {
-        const build = await prisma.build.findUnique({
-          where: { id: currentSnapshot.buildId },
-          select: { generatedPatch: true },
-        })
-        const patch = build?.generatedPatch as { rawHTML?: string } | null
-        return patch?.rawHTML ?? getBaselineHTML()
-      }
-      return getBaselineHTML()
+    const lastRawHTML = (() => {
+      if (!lastBuild) return null
+      const patch = lastBuild.generatedPatch as { rawHTML?: string } | null
+      return patch?.rawHTML ?? null
     })()
 
-    const RESET_KEYWORDS = ["remove everything", "start fresh", "start over", "reset", "blank", "clean slate", "from scratch", "wipe", "clear everything", "remove all"]
-    const isReset = RESET_KEYWORDS.some((kw) => submission.prompt.toLowerCase().includes(kw))
-
-    // Generate HTML from prompt, passing current HTML as context unless it's a reset
-    const rawHTML = await generatePageHTML(submission.prompt, isReset ? null : currentHTML)
-    const cleanHTML = validateAndClean(rawHTML)
+    // Interpreter handles reset detection internally
+    const rawHTML = await generatePageHTML(submission.prompt, lastRawHTML)
+    const validatedHTML = validateAndClean(rawHTML)
+    const cleanHTML = await swapImages(validatedHTML)
+    console.log("[pipeline] Images swapped")
 
     // Create build record
     const build = await prisma.build.create({

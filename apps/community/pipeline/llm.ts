@@ -1,195 +1,233 @@
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434"
+
+const USE_ANTHROPIC = !!process.env.ANTHROPIC_API_KEY
 const USE_GROQ = !!process.env.GROQ_API_KEY
 
-// ── Shared fetch ────────────────────────────────────────────────────────────
+// ── Groq — used for interpreter + verifier (fast, free, small model) ──────────
 
-async function callLLM(
+async function callGroq(
   messages: { role: string; content: string }[],
   options: { model?: string; temperature?: number; max_tokens?: number } = {}
 ): Promise<string> {
-  if (USE_GROQ) {
-    const res = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: options.model ?? "llama-3.3-70b-versatile",
-        messages,
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.max_tokens ?? 6000,
-      }),
-    })
-    if (!res.ok) throw new Error(`Groq error: ${res.status} ${await res.text()}`)
-    const data = await res.json()
-    return data.choices?.[0]?.message?.content ?? ""
-  } else {
-    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.OLLAMA_MODEL ?? "llama3.2",
-        messages,
-        stream: false,
-      }),
-    })
-    if (!res.ok) throw new Error(`Ollama error: ${res.status} ${await res.text()}`)
-    const data = await res.json()
-    return data.message?.content ?? ""
-  }
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: options.model ?? "llama-3.1-8b-instant",
+      messages,
+      temperature: options.temperature ?? 0.2,
+      max_tokens: options.max_tokens ?? 1000,
+    }),
+  })
+  if (!res.ok) throw new Error(`Groq error: ${res.status} ${await res.text()}`)
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content ?? ""
 }
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Anthropic — used for generator (high quality HTML) ───────────────────────
+
+async function callAnthropic(
+  system: string,
+  userMessage: string,
+  options: { temperature?: number; max_tokens?: number } = {}
+): Promise<string> {
+  const res = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: options.max_tokens ?? 8000,
+      temperature: options.temperature ?? 0.7,
+      system,
+      messages: [{ role: "user", content: userMessage }],
+    }),
+  })
+  if (!res.ok) throw new Error(`Anthropic error: ${res.status} ${await res.text()}`)
+  const data = await res.json()
+  return data.content?.[0]?.text ?? ""
+}
+
+// ── Ollama — fallback if no cloud keys ───────────────────────────────────────
+
+async function callOllama(
+  messages: { role: string; content: string }[],
+): Promise<string> {
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: process.env.OLLAMA_MODEL ?? "llama3.2",
+      messages,
+      stream: false,
+    }),
+  })
+  if (!res.ok) throw new Error(`Ollama error: ${res.status} ${await res.text()}`)
+  const data = await res.json()
+  return data.message?.content ?? ""
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type Brief = {
   intent: "restyle" | "addContent" | "removeContent" | "embed" | "reset" | "other"
-  preserveContent: boolean
-  preserveLayout: boolean
+  preserveExisting: boolean
   resetContext: boolean
   generatorInstruction: string
 }
 
-// ── Stage 1: Interpreter ─────────────────────────────────────────────────────
+// ── Stage 1: Interpreter (Groq 8b — fast + free) ─────────────────────────────
 
 export async function interpretPrompt(
   userPrompt: string,
   hasCurrentSite: boolean
 ): Promise<Brief> {
-  const system = `You are a prompt interpreter for a website builder. A user has submitted a prompt to modify a personal website.
+  const system = `You are a prompt interpreter for a website builder. Analyze the user's prompt and output a JSON brief. Output ONLY valid JSON, no markdown.
 
-Your job is to analyze the prompt and output a JSON brief for the generator. Output ONLY valid JSON, no explanation, no markdown.
-
-JSON shape:
 {
-  "intent": one of: "restyle" | "addContent" | "removeContent" | "embed" | "reset" | "other",
-  "preserveContent": boolean — true if all existing text/sections should be kept,
-  "preserveLayout": boolean — true if the page structure/layout should stay the same,
-  "resetContext": boolean — true if the user wants to start completely fresh,
-  "generatorInstruction": string — a clear, detailed instruction for the HTML generator that captures exactly what to do
+  "intent": "restyle" | "addContent" | "removeContent" | "embed" | "reset" | "other",
+  "preserveExisting": boolean — true if the existing page should be kept as the base,
+  "resetContext": boolean — true ONLY if user explicitly wants to start over completely,
+  "generatorInstruction": string — rewrite the user prompt as a clear, specific, detailed instruction for an expert web designer. Be specific about visual style, layout, colors, typography, and interactions. Do not mention any header bar or navigation.
 }
 
-Rules:
-- "restyle" = color/font/theme changes only
-- "addContent" = adding new sections, text, elements
-- "removeContent" = removing existing content
-- "embed" = adding a YouTube/video/image embed
-- "reset" = start over from scratch
-- preserveContent should be true for restyle, false for reset
-- generatorInstruction must be specific and actionable, not just repeat the user prompt
-- Always append to generatorInstruction: "Do not modify or remove the sticky header bar at the top of the page (class: protected-bar)."`
+Guidelines:
+- restyle = color/font/theme only → preserveExisting: true
+- addContent = adding something new → preserveExisting: true
+- removeContent = removing things → preserveExisting: true
+- embed = adding YouTube/image → preserveExisting: true
+- reset = start completely fresh → preserveExisting: false, resetContext: true
+- If user says "remove everything" / "start over" / "blank" / "fresh" → reset
+- generatorInstruction should be rich and detailed`
 
-  const user = `User prompt: "${userPrompt}"
-Has existing site: ${hasCurrentSite}
-
-Output the JSON brief.`
-
-  const raw = await callLLM(
-    [{ role: "system", content: system }, { role: "user", content: user }],
-    { model: "llama-3.1-8b-instant", temperature: 0.2, max_tokens: 500 }
-  )
+  const messages = [
+    { role: "system", content: system },
+    { role: "user", content: `User prompt: "${userPrompt}"\nHas existing site: ${hasCurrentSite}\n\nOutput JSON:` },
+  ]
 
   try {
+    const raw = USE_GROQ
+      ? await callGroq(messages, { temperature: 0.2, max_tokens: 600 })
+      : await callOllama(messages)
     const cleaned = raw.replace(/```json\n?/gi, "").replace(/```\n?/g, "").trim()
     return JSON.parse(cleaned) as Brief
   } catch {
-    // Fallback brief if parsing fails
     return {
       intent: "other",
-      preserveContent: true,
-      preserveLayout: false,
+      preserveExisting: hasCurrentSite,
       resetContext: false,
-      generatorInstruction: `Apply this change to the website: "${userPrompt}". Do not modify or remove the sticky header bar at the top of the page (class: protected-bar).`,
+      generatorInstruction: userPrompt,
     }
   }
 }
 
-// ── Stage 2: Generator ───────────────────────────────────────────────────────
+// ── Stage 2: Generator (Claude Sonnet — high quality) ────────────────────────
 
-const GENERATOR_SYSTEM = `You are an expert creative web designer. You produce complete, stunning personal websites as a single HTML block.
+const GENERATOR_SYSTEM = `You are an elite UI/UX designer and frontend developer. You produce stunning, production-quality websites as complete self-contained HTML documents.
 
-Output ONLY raw HTML with an embedded <style> block. No markdown, no code fences, no explanation.
-Do NOT include <html>, <head>, or <body> tags.
+Output a COMPLETE valid HTML document with <!DOCTYPE html>, <html>, <head>, and <body>.
+This renders in a full-page iframe — make it fill the entire viewport beautifully.
 
-EVERY output must have:
-- A <style> block with Google Fonts (@import), CSS variables at :root, and full page styling
-- Beautiful typography: large name heading, readable body, good line-height
-- A cohesive color scheme that fits the requested mood
-- All sections present: name, bio, experience, projects, contact links
-- Subtle polish: hover states, clean dividers, consistent spacing
-- Max-width centered layout (~700px), generous padding
+CRITICAL OUTPUT CONSTRAINT — PLAN BEFORE YOU WRITE:
+Your entire output must be under 300 lines. Budget carefully:
+- ~20 lines: DOCTYPE, html, head, meta, font links
+- ~80 lines: CSS (use shorthand, combine selectors, CSS variables, no repetition)
+- ~120 lines: HTML structure
+- ~60 lines: JavaScript if needed
+If a design needs more, simplify — prioritize visual impact over completeness.
+Use CSS classes not inline styles. No redundant whitespace or comments.
+Always end with </html> — never leave output incomplete.
+
+DESIGN STANDARDS:
+- Google Fonts via <link> — choose fonts that match the mood
+- CSS custom properties (--color-*, --font-*, --spacing-*) for consistency
+- CSS Grid and Flexbox used correctly
+- Clear typography hierarchy: headings, subheadings, body
+- Hover states, smooth transitions (200-300ms)
+- Cohesive color palette, generous whitespace
+- Must look like it was built by a senior designer at a top tech company
+
+CAPABILITIES — use freely:
+- <script> tags for animations, canvas, games, particle systems, simulations
+- Libraries from cdnjs.cloudflare.com (Three.js, p5.js, GSAP, Chart.js, etc.)
+- CSS animations, keyframes, transforms, filters, backdrop-blur
+- Inline SVG icons and illustrations
+- Images: <img src="https://picsum.photos/800/500" alt="KEYWORD"> with specific keywords like alt="messi football" or alt="tokyo skyline night"
+- YouTube: <iframe src="https://www.youtube.com/embed/VIDEO_ID" frameborder="0" allowfullscreen></iframe>
 
 HARD RULES:
-- No <script> tags
-- No <video> or <audio> tags  
-- For YouTube: <iframe width="100%" height="400" src="https://www.youtube.com/embed/VIDEO_ID" frameborder="0" allowfullscreen></iframe>
-- Do NOT touch elements with class "protected-bar" — this is a system header injected outside your output
+- No <video> or <audio> tags
+- No markdown fences — ONLY the raw HTML document
 
-Evan Huang's info:
-- Mathematics graduate, University of Waterloo
-- BlackBerry (Network Engineer Intern): Python monitoring scripts, Grafana dashboards, AWS/Linux infra
-- Compugen (Network Ops Intern): Azure monitoring, incident response, 99.9% SLA
-- Projects: this website (Next.js), Live Subtitles (JS/Python/C++), Yamagotchi (Python, Fantasy NBA)
-- Interests: basketball, soccer, pixel art
-- Links: github.com/EHuangg | evan.hu.huang@gmail.com | linkedin.com/in/evan-huang-187116179`
+Respond with ONLY the complete HTML document. Nothing else.`
 
 export async function generateHTML(brief: Brief, currentHTML: string | null): Promise<string> {
-  const contextSection = (brief.preserveContent || brief.preserveLayout) && currentHTML
-    ? `\n\nCurrent website HTML to build upon:\n${currentHTML}\n`
-    : ""
+  const contextHTML = brief.preserveExisting && currentHTML
+    ? currentHTML.slice(0, 6000) // trim to keep input tokens reasonable
+    : null
 
-  const user = `${contextSection}
-Instruction: ${brief.generatorInstruction}
+  const contextSection = brief.preserveExisting && contextHTML
+    ? `Current page HTML (preserve structure and content, apply only the requested changes):\n\`\`\`html\n${contextHTML}\n\`\`\`\n\n`
+    : "This is a fresh start — create something entirely new.\n\n"
 
-Generate the complete HTML now.`
+  const userMessage = `${contextSection}Design instruction: ${brief.generatorInstruction}\n\nGenerate the complete HTML document now. Make it exceptional.`
 
-  return callLLM(
-    [{ role: "system", content: GENERATOR_SYSTEM }, { role: "user", content: user }],
-    { temperature: 0.8, max_tokens: 6000 }
-  )
+  if (USE_ANTHROPIC) {
+    console.log("[pipeline] Using Claude Sonnet for generation")
+    return callAnthropic(GENERATOR_SYSTEM, userMessage, { temperature: 0.7, max_tokens: 10000 })
+  } else if (USE_GROQ) {
+    console.log("[pipeline] Using Groq 70b for generation")
+    return callGroq(
+      [{ role: "system", content: GENERATOR_SYSTEM }, { role: "user", content: userMessage }],
+      { model: "llama-3.3-70b-versatile", temperature: 0.7, max_tokens: 8000 }
+    )
+  } else {
+    return callOllama([
+      { role: "system", content: GENERATOR_SYSTEM },
+      { role: "user", content: userMessage },
+    ])
+  }
 }
 
-// ── Stage 3: Verifier ─────────────────────────────────────────────────────────
+// ── Stage 3: Verifier (Groq 8b — fast + free) ────────────────────────────────
 
 const VERIFIER_SYSTEM = `You are an HTML quality verifier for a personal website builder.
 
-You will receive:
-1. The original instruction brief
-2. The generated HTML
-
-Your job is to check:
-- Does the HTML match the intent of the brief?
-- Are there any obvious structural HTML errors (unclosed tags, broken nesting)?
-- Is the styling complete and coherent?
-- Does it include all required content (name, bio, experience, projects, contacts)?
-- Does it avoid forbidden elements (script, video, audio tags)?
+Check the generated HTML against the brief:
+1. Is it a complete valid HTML document (DOCTYPE, html, head, body)?
+2. Does it match the intent?
+3. Are there forbidden elements (video, audio)?
+4. Is styling complete and cohesive?
+5. For preserveExisting=true: does it keep existing content/structure?
 
 Output ONLY valid JSON:
 {
   "approved": boolean,
-  "issues": string[] — list of specific problems found (empty if approved),
-  "fixInstruction": string — specific instruction to fix the issues (empty if approved)
+  "issues": string[],
+  "fixInstruction": string
 }`
 
 export async function verifyHTML(
   brief: Brief,
   html: string
 ): Promise<{ approved: boolean; issues: string[]; fixInstruction: string }> {
-  const user = `Brief:
-${JSON.stringify(brief, null, 2)}
-
-Generated HTML:
-${html}
-
-Verify and output JSON.`
-
-  const raw = await callLLM(
-    [{ role: "system", content: VERIFIER_SYSTEM }, { role: "user", content: user }],
-    { model: "llama-3.1-8b-instant", temperature: 0.1, max_tokens: 500 }
-  )
+  const messages = [
+    { role: "system", content: VERIFIER_SYSTEM },
+    { role: "user", content: `Brief:\n${JSON.stringify(brief, null, 2)}\n\nHTML (first 3000 chars):\n${html.slice(0, 3000)}\n\nVerify:` },
+  ]
 
   try {
+    const raw = USE_GROQ
+      ? await callGroq(messages, { temperature: 0.1, max_tokens: 500 })
+      : await callOllama(messages)
     const cleaned = raw.replace(/```json\n?/gi, "").replace(/```\n?/g, "").trim()
     return JSON.parse(cleaned)
   } catch {
@@ -203,31 +241,47 @@ export async function generatePageHTML(
   userPrompt: string,
   currentHTML: string | null
 ): Promise<string> {
-  // Stage 1: Interpret
   const brief = await interpretPrompt(userPrompt, !!currentHTML)
   console.log("[pipeline] Brief:", JSON.stringify(brief))
 
   const contextHTML = brief.resetContext ? null : currentHTML
 
-  // Stage 2: Generate (with up to 2 retries based on verifier feedback)
   let html = await generateHTML(brief, contextHTML)
-  console.log("[pipeline] Generated HTML length:", html.length)
+  console.log("[pipeline] Generated length:", html.length)
 
-  // Stage 3: Verify + retry loop (max 2 attempts)
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const verification = await verifyHTML(brief, html)
-    console.log(`[pipeline] Verify attempt ${attempt + 1}:`, verification.approved, verification.issues)
+  // Completion check — if output was cut off, request completion
+  const isComplete = html.trimEnd().endsWith("</html>")
+  if (!isComplete) {
+    console.log("[pipeline] Output incomplete — requesting completion")
+    try {
+      const completion = await callAnthropic(
+        "You are completing an HTML document that was cut off. Output only the missing closing portion starting from where it was cut off. End with </html>.",
+        `This HTML was cut off mid-generation. Complete it:\n\n${html.slice(-2000)}`,
+        { temperature: 0.1, max_tokens: 2000 }
+      )
+      // Find where the cut happened and append the completion
+      const lastTag = html.lastIndexOf("<")
+      const safeBase = html.slice(0, lastTag)
+      html = safeBase + completion.replace(/```html\n?/gi, "").replace(/```\n?/g, "").trim()
+      console.log("[pipeline] Completion appended, new length:", html.length)
+    } catch (err) {
+      console.error("[pipeline] Completion failed:", err)
+    }
+  }
 
-    if (verification.approved) break
-
-    if (verification.fixInstruction) {
-      const fixedBrief: Brief = {
-        ...brief,
-        generatorInstruction: `${brief.generatorInstruction}\n\nFix these issues from the previous attempt: ${verification.fixInstruction}`,
-      }
-      html = await generateHTML(fixedBrief, contextHTML)
-    } else {
-      break
+  // Verifier + retry loop (max 2 attempts) — only use for non-Anthropic
+  // Claude's output quality is high enough that verification is usually unnecessary
+  if (!USE_ANTHROPIC) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await verifyHTML(brief, html)
+      console.log(`[pipeline] Verify ${attempt + 1}:`, result.approved, result.issues)
+      if (result.approved) break
+      if (result.fixInstruction) {
+        html = await generateHTML(
+          { ...brief, generatorInstruction: `${brief.generatorInstruction}\n\nFix: ${result.fixInstruction}` },
+          contextHTML
+        )
+      } else break
     }
   }
 
