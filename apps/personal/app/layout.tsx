@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
 import "./globals.css"
-import { siteConfig } from "@personal-website/shared"
 
 export const metadata: Metadata = {
-  title: siteConfig.name,
-  description: siteConfig.bio,
+  title: "Find Evan",
+  description: "Evan Huang — Mathematics graduate, software developer, network engineer.",
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
