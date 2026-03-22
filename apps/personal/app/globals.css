@@ -31,7 +31,14 @@ body {
   padding: 4rem 1.5rem 6rem;
 }
 
-.content { width: 100%; max-width: 580px; }
+.content {
+  width: 100%;
+  max-width: 580px;
+  background: rgba(245, 240, 232, 0.92);
+  backdrop-filter: blur(2px);
+  padding: 2rem;
+  border-radius: 2px;
+}
 
 .name {
   font-family: var(--font-main);
@@ -238,6 +245,7 @@ body {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
 }
 
 .tag {
@@ -261,9 +269,13 @@ body {
 }
 
 .tag--active {
-  color: var(--ink);
-  background: var(--ink-faint);
-  border-color: var(--ink-faint);
+  color: var(--bg);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.tag--dimmed {
+  opacity: 1;
 }
 
 .tag-icon {

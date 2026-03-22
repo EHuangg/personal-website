@@ -31,11 +31,25 @@ export async function runDailyBuild(): Promise<{
       return patch?.rawHTML ?? null
     })()
 
-    // Interpreter handles reset detection internally
-    const rawHTML = await generatePageHTML(submission.prompt, lastRawHTML)
-    const validatedHTML = validateAndClean(rawHTML)
-    const cleanHTML = await swapImages(validatedHTML)
-    console.log("[pipeline] Images swapped")
+    // Check if this is a visual build submission
+    const isVisual = submission.prompt.startsWith("[visual]\n")
+
+    let rawHTML: string
+    let cleanHTML: string
+
+    if (isVisual) {
+      // Visual build — HTML is already generated, just validate and swap images
+      rawHTML = submission.prompt.replace("[visual]\n", "")
+      const validatedHTML = validateAndClean(rawHTML)
+      cleanHTML = await swapImages(validatedHTML)
+      console.log("[pipeline] Visual build processed")
+    } else {
+      // AI build — run through LLM pipeline
+      rawHTML = await generatePageHTML(submission.prompt, lastRawHTML)
+      const validatedHTML = validateAndClean(rawHTML)
+      cleanHTML = await swapImages(validatedHTML)
+      console.log("[pipeline] AI build processed")
+    }
 
     // Create build record
     const build = await prisma.build.create({

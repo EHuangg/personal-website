@@ -111,13 +111,18 @@ function ProtectedBar({ isDefault }: { isDefault: boolean }) {
           )}
         </div>
 
-        {/* Right: rewrite button */}
-        <button
-          className="bar-rewrite-btn"
-          onClick={() => { setFormOpen((o) => !o); setSubmitState({ status: "idle" }) }}
-        >
-          {formOpen ? "close ✕" : "this page too boring?"}
-        </button>
+        {/* Right: edit + rewrite buttons */}
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <a href="/editor" className="bar-rewrite-btn" style={{ textDecoration: "none" }}>
+            edit this page →
+          </a>
+          <button
+            className="bar-rewrite-btn"
+            onClick={() => { setFormOpen((o) => !o); setSubmitState({ status: "idle" }) }}
+          >
+            {formOpen ? "close ✕" : "find this page too boring? →"}
+          </button>
+        </div>
       </div>
 
       {/* Expandable form */}
@@ -134,7 +139,7 @@ function ProtectedBar({ isDefault }: { isDefault: boolean }) {
             <div className="bar-form">
               <textarea
                 className="bar-textarea"
-                placeholder="rebuild this site for me, start prompting..."
+                placeholder="make it dark mode / add a giant elephant / redesign as a retro terminal..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 maxLength={500}

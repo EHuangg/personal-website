@@ -1,7 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import dynamic from "next/dynamic"
 import { siteConfig } from "@personal-website/shared"
+
+const MapBackground = dynamic(() => import("./MapBackground"), { ssr: false })
 
 const tagIcons: Record<string, string> = {
   "Python":      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2C9 2 7 3.5 7 5.5V8h5v1H5.5C3.5 9 2 10.5 2 13s1.5 4 3.5 4H7v-2.5c0-2 2-3.5 5-3.5s5 1.5 5 3.5V17h1.5c2 0 3.5-1.5 3.5-4s-1.5-4-3.5-4H17V8h-5V5.5C12 3.5 14 2 17 2"/><circle cx="9.5" cy="5.5" r="0.75" fill="currentColor" stroke="none"/><circle cx="14.5" cy="18.5" r="0.75" fill="currentColor" stroke="none"/></svg>`,
@@ -23,20 +26,28 @@ const tagIcons: Record<string, string> = {
   "Git":         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><path d="M8 6h8M6 8v8"/><path d="M8.5 16.5L16 8"/></svg>`,
 }
 
-function Tags({ tags, activeTag, onTagClick, tagCounts }: {
+// Tag counts across all sections
+const tagCounts: Record<string, number> = {}
+for (const job of siteConfig.experience) {
+  for (const tag of job.tags) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
+}
+for (const project of siteConfig.projects) {
+  for (const tag of project.tags) tagCounts[tag] = (tagCounts[tag] ?? 0) + 1
+}
+
+function Tags({ tags, activeTag, onTagClick }: {
   tags: string[]
   activeTag: string | null
   onTagClick: (tag: string) => void
-  tagCounts: Record<string, number>
 }) {
   return (
     <div className="tags">
       {tags.map((tag) => (
         <button
           key={tag}
-          className={`tag ${activeTag === tag ? "tag--active" : ""}`}
+          className={`tag ${activeTag === tag ? "tag--active" : ""} ${activeTag !== null && activeTag !== tag ? "tag--dimmed" : ""}`}
           onClick={() => onTagClick(tag)}
-          title={`${tag}: ${tagCounts[tag] ?? 0} total`}
+          title={`${tagCounts[tag] ?? 1} occurrence${(tagCounts[tag] ?? 1) === 1 ? "" : "s"}`}
         >
           {tagIcons[tag] && (
             <span className="tag-icon" dangerouslySetInnerHTML={{ __html: tagIcons[tag] }} />
@@ -48,14 +59,12 @@ function Tags({ tags, activeTag, onTagClick, tagCounts }: {
   )
 }
 
-function Job({ job, activeTag, onTagClick, tagCounts }: {
+function Job({ job, activeTag, onTagClick }: {
   job: typeof siteConfig.experience[0]
   activeTag: string | null
   onTagClick: (tag: string) => void
-  tagCounts: Record<string, number>
 }) {
   const [open, setOpen] = useState(false)
-
   return (
     <div className="job">
       <button className="job-header" onClick={() => setOpen((o) => !o)}>
@@ -68,12 +77,11 @@ function Job({ job, activeTag, onTagClick, tagCounts }: {
           <span className={`job-chevron ${open ? "job-chevron--open" : ""}`}>▾</span>
         </div>
       </button>
-
       <div className={`job-body ${open ? "job-body--open" : ""}`}>
         <ul className="job-points">
           {job.points.map((pt, i) => <li key={i}>{pt}</li>)}
         </ul>
-        <Tags tags={job.tags} activeTag={activeTag} onTagClick={onTagClick} tagCounts={tagCounts} />
+        <Tags tags={job.tags} activeTag={activeTag} onTagClick={onTagClick} />
       </div>
     </div>
   )
@@ -82,66 +90,74 @@ function Job({ job, activeTag, onTagClick, tagCounts }: {
 export default function Home() {
   const [activeTag, setActiveTag] = useState<string | null>(null)
 
-  const tagCounts = [...siteConfig.experience.flatMap((job) => job.tags), ...siteConfig.projects.flatMap((project) => project.tags)]
-    .reduce<Record<string, number>>((counts, tag) => {
-      counts[tag] = (counts[tag] ?? 0) + 1
-      return counts
-    }, {})
-
   function handleTagClick(tag: string) {
     setActiveTag((prev) => (prev === tag ? null : tag))
   }
 
   return (
-    <main className="paper">
-      <div className="content">
+    <MapBackground>
+      <main className="paper">
+        <div className="content">
 
-        <header>
-          <h1 className="name">{siteConfig.name}</h1>
-          <div className="contact-row">
-            <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="contact-link">github</a>
-            <a href={`mailto:${siteConfig.links.email}`} className="contact-link">email</a>
-            <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="contact-link">linkedin</a>
-            <a href={siteConfig.links.resume} download className="resume-link">resume.pdf ↓</a>
-          </div>
-        </header>
+          <header>
+            <h1 className="name">{siteConfig.name}</h1>
+            <div className="contact-row">
+              <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="contact-link">github</a>
+              <a href={`mailto:${siteConfig.links.email}`} className="contact-link">email</a>
+              <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="contact-link">linkedin</a>
+              <a href={siteConfig.links.resume} download className="resume-link">resume.pdf ↓</a>
+            </div>
+          </header>
 
-        <hr className="divider" />
+          <hr className="divider" />
 
-        <section>
-          <p className="section-label">about</p>
-          <p className="bio">{siteConfig.bio}</p>
-        </section>
+          <section>
+            <p className="section-label">about</p>
+            <p className="bio">{siteConfig.bio}</p>
+            {/* Map cutout — sharp window into the blurred background map */}
+            <div
+              id="map-cutout-placeholder"
+              style={{
+                width: "100%",
+                height: 180,
+                marginTop: "1rem",
+                borderRadius: 4,
+                border: "1px solid var(--ink-faint)",
+                background: "var(--bg)",
+              }}
+            />
+          </section>
 
-        <hr className="divider" />
+          <hr className="divider" />
 
-        <section>
-          <p className="section-label">experience</p>
-          <div className="experience-list">
-            {siteConfig.experience.map((job) => (
-              <Job key={job.company} job={job} activeTag={activeTag} onTagClick={handleTagClick} tagCounts={tagCounts} />
-            ))}
-          </div>
-        </section>
+          <section>
+            <p className="section-label">experience</p>
+            <div className="experience-list">
+              {siteConfig.experience.map((job) => (
+                <Job key={job.company} job={job} activeTag={activeTag} onTagClick={handleTagClick} />
+              ))}
+            </div>
+          </section>
 
-        <hr className="divider" />
+          <hr className="divider" />
 
-        <section>
-          <p className="section-label">projects</p>
-          <div className="project-list">
-            {siteConfig.projects.map((project) => (
-              <div key={project.name} className="project">
-                <a href={project.url} target="_blank" rel="noopener noreferrer" className="project-name">
-                  {project.name} ↗
-                </a>
-                <p className="project-desc">{project.description}</p>
-                <Tags tags={project.tags} activeTag={activeTag} onTagClick={handleTagClick} tagCounts={tagCounts} />
-              </div>
-            ))}
-          </div>
-        </section>
+          <section>
+            <p className="section-label">projects</p>
+            <div className="project-list">
+              {siteConfig.projects.map((project) => (
+                <div key={project.name} className="project">
+                  <a href={project.url} target="_blank" rel="noopener noreferrer" className="project-name">
+                    {project.name} ↗
+                  </a>
+                  <p className="project-desc">{project.description}</p>
+                  <Tags tags={project.tags} activeTag={activeTag} onTagClick={handleTagClick} />
+                </div>
+              ))}
+            </div>
+          </section>
 
-      </div>
-    </main>
+        </div>
+      </main>
+    </MapBackground>
   )
 }
