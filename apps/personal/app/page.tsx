@@ -226,11 +226,20 @@ function Clock() {
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
+  const sheetStartYRef = useRef<number | null>(null)
+  const sheetDraggingRef = useRef(false)
+  const sheetOffsetRef = useRef(0)
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
+  const [sheetOffsetY, setSheetOffsetY] = useState(0)
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
+
+  const setSheetOffset = useCallback((value: number) => {
+    sheetOffsetRef.current = value
+    setSheetOffsetY(value)
+  }, [])
 
   const geojsonData = useCallback((active: PinId | null) => ({
     type: "FeatureCollection",
@@ -430,6 +439,39 @@ export default function FindEvan() {
 
   const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
 
+  useEffect(() => {
+    setSheetOffset(0)
+    sheetStartYRef.current = null
+    sheetDraggingRef.current = false
+  }, [expandedPin, setSheetOffset])
+
+  const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    sheetDraggingRef.current = true
+    sheetStartYRef.current = e.touches[0].clientY
+  }, [])
+
+  const handleSheetTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!sheetDraggingRef.current || sheetStartYRef.current === null) return
+    const delta = e.touches[0].clientY - sheetStartYRef.current
+    if (delta <= 0) {
+      setSheetOffset(0)
+      return
+    }
+    e.preventDefault()
+    setSheetOffset(Math.min(360, delta))
+  }, [setSheetOffset])
+
+  const handleSheetTouchEnd = useCallback(() => {
+    if (!sheetDraggingRef.current) return
+    sheetDraggingRef.current = false
+    sheetStartYRef.current = null
+    if (sheetOffsetRef.current > 120 && expandedPin) {
+      togglePin(expandedPin)
+      return
+    }
+    setSheetOffset(0)
+  }, [expandedPin, togglePin, setSheetOffset])
+
   return (
     <div className="app">
       <div className="topbar">
@@ -441,7 +483,7 @@ export default function FindEvan() {
       <div className="main">
         <aside className="sidebar">
           {/* ── Expanded detail ── */}
-          <div className="sidebar-panel" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
+          <div className="sidebar-panel sidebar-panel--expanded" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
             {expandedPinData && (
               <>
                 <div className="sidebar-scroll">
@@ -489,7 +531,7 @@ export default function FindEvan() {
           </div>
 
           {/* ── List view ── */}
-          <div className="sidebar-panel" style={{ transform: expandedPin ? "translateX(100%)" : "translateX(0)", opacity: expandedPin ? 0 : 1, pointerEvents: expandedPin ? "none" : "auto" }}>
+          <div className="sidebar-panel sidebar-panel--list" style={{ transform: expandedPin ? "translateX(100%)" : "translateX(0)", opacity: expandedPin ? 0 : 1, pointerEvents: expandedPin ? "none" : "auto" }}>
             <div className="sidebar-scroll">
               {/* Hero */}
               <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`} onClick={() => togglePin("evan")}>
@@ -548,6 +590,61 @@ export default function FindEvan() {
           )}
         </div>
       </div>
+
+      {expandedPinData && (
+        <>
+          <div className="mobile-detail-backdrop" onClick={() => togglePin(expandedPinData.id)} />
+          <div
+            className="mobile-detail-sheet"
+            style={{
+              transform: `translateY(${sheetOffsetY}px)`,
+              transition: sheetDraggingRef.current ? "none" : "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+            }}
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+            onTouchCancel={handleSheetTouchEnd}
+          >
+            <div className="mobile-detail-grabber" />
+            <div className="sidebar-scroll" style={{ paddingBottom: "1rem" }}>
+              <div style={{ padding: "0.75rem 1rem 0" }}>
+                <button onClick={() => togglePin(expandedPinData.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
+                  ‹ back
+                </button>
+                {expandedPinData.id === "evan" ? (
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <div style={{
+                      width: "100%", aspectRatio: "1", borderRadius: 8,
+                      overflow: "hidden", background: "#0a84ff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      marginBottom: "0.6rem",
+                    }}>
+                      <img src="/pins/evan.jpg" alt="Evan Huang"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    </div>
+                    <div className="hero-name" style={{ fontSize: "1.1rem" }}>Evan Huang</div>
+                    <div className="hero-sub">Oakville, ON · Mathematics · UWaterloo</div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+                    <PinAvatar pin={expandedPinData} size={48} />
+                    <div>
+                      <div className="hero-name">{expandedPinData.label}</div>
+                      <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {expandedPinData.id === "evan" && <EvanDetail />}
+              {expandedPinData.id === "uow" && <UoWDetail />}
+              {expandedPinData.id === "blackberry" && <ExperienceDetail job={siteConfig.experience[0]} />}
+              {expandedPinData.id === "compugen" && <ExperienceDetail job={siteConfig.experience[1]} />}
+              {expandedPinData.id === "projects" && <ProjectsDetail />}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

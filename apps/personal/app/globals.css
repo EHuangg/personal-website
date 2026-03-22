@@ -202,6 +202,11 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
   will-change: transform;
 }
 
+.mobile-detail-backdrop,
+.mobile-detail-sheet {
+  display: none;
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -221,5 +226,51 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     height: auto;
     flex: 1 1 54%;
     min-height: 0;
+  }
+
+  .sidebar-panel--expanded {
+    display: none;
+  }
+
+  .sidebar-panel--list {
+    transform: translateX(0) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .mobile-detail-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.18);
+    z-index: 120;
+  }
+
+  .mobile-detail-sheet {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 76dvh;
+    max-height: 76dvh;
+    background: var(--sidebar-bg);
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+    border-top: 0.5px solid var(--ink-faint);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
+    z-index: 130;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  .mobile-detail-grabber {
+    width: 42px;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--ink-faint);
+    margin: 10px auto 8px;
+    flex-shrink: 0;
   }
 }
