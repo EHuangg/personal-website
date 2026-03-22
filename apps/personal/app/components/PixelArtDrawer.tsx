@@ -11,17 +11,45 @@ const PALETTE = [
   "#5ac8fa", "#ff6b35", "#2a2318", "#c8b89a", "#6a5a42", "#f5f0e8",
 ]
 
-export default function PixelArtDrawer({ onSubmit, onCancel }: {
+export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
   onSubmit: (dataUrl: string) => void
   onCancel: () => void
+  initialArt?: string
 }) {
-  const [grid, setGrid] = useState<string[][]>(() =>
-    Array.from({ length: SIZE }, () => Array(SIZE).fill(""))
-  )
+  const [grid, setGrid] = useState<string[][]>(() => {
+    if (initialArt) {
+      // Decode existing art into grid
+      const img = new Image()
+      img.src = initialArt
+      // Will be populated via useEffect below
+    }
+    return Array.from({ length: SIZE }, () => Array(SIZE).fill(""))
+  })
   const [color, setColor] = useState("#0a84ff")
   const [erasing, setErasing] = useState(false)
   const [drawing, setDrawing] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Load initial art into grid if editing
+  useEffect(() => {
+    if (!initialArt) return
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement("canvas")
+      c.width = SIZE; c.height = SIZE
+      const ctx = c.getContext("2d")!
+      ctx.drawImage(img, 0, 0, SIZE, SIZE)
+      const newGrid = Array.from({ length: SIZE }, (_, y) =>
+        Array.from({ length: SIZE }, (_, x) => {
+          const d = ctx.getImageData(x, y, 1, 1).data
+          if (d[3] === 0) return ""
+          return `#${[d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, "0")).join("")}`
+        })
+      )
+      setGrid(newGrid)
+    }
+    img.src = initialArt
+  }, [initialArt])
 
   // Draw grid to canvas
   useEffect(() => {

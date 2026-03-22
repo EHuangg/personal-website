@@ -65,13 +65,19 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data[0])
 }
 
-// DELETE — remove own pin
+// DELETE — remove own pin by ID
 export async function DELETE(req: NextRequest) {
-  const ip_hash = getIpHash(req)
-  const res = await sbFetch(`/visitor_pins?ip_hash=eq.${ip_hash}`, {
+  const { id } = await req.json().catch(() => ({ id: null }))
+  if (!id) return NextResponse.json({ error: "Missing pin ID" }, { status: 400 })
+
+  console.log("[visitor-pins] DELETE id:", id)
+  const res = await sbFetch(`/visitor_pins?id=eq.${id}`, {
     method: "DELETE",
+    headers: { "Prefer": "" },
   })
   if (!res.ok) {
+    const err = await res.text()
+    console.error("[visitor-pins] DELETE error:", err)
     return NextResponse.json({ error: "Failed to delete" }, { status: 500 })
   }
   return NextResponse.json({ success: true })

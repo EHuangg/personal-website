@@ -104,6 +104,7 @@ type MapboxMap = {
   addImage: (id: string, data: object, opts?: object) => void
   updateImage: (id: string, data: object) => void
   hasImage: (id: string) => boolean
+  removeImage: (id: string) => void
   triggerRepaint: () => void
   getSource: (id: string) => { setData: (data: object) => void } | undefined
   setLayoutProperty: (layer: string, prop: string, value: unknown) => void
@@ -135,11 +136,12 @@ function loadMapbox(): Promise<void> {
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
   const [activePin, setActivePin] = useState<PinId | null>(null)
+  const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
 
-  // Load an image and draw circular pin — returns Promise<canvas>
+  // Draw a circular pin — returns Promise<canvas>
   const drawPinImage = useCallback((pin: Pin, active: boolean): Promise<HTMLCanvasElement> => {
     return new Promise((resolve) => {
       const size = active ? 80 : 60
@@ -150,30 +152,21 @@ export default function FindEvan() {
 
       const draw = (img?: HTMLImageElement) => {
         ctx.clearRect(0, 0, size, size)
-
-        // Drop shadow
         ctx.shadowColor = "rgba(0,0,0,0.28)"
         ctx.shadowBlur = active ? 10 : 6
         ctx.shadowOffsetY = 2
-
-        // White border
         ctx.beginPath()
         ctx.arc(cx, cy, r, 0, Math.PI * 2)
         ctx.fillStyle = "white"
         ctx.fill()
         ctx.shadowColor = "transparent"
-
-        // Clip circle
         ctx.save()
         ctx.beginPath()
         ctx.arc(cx, cy, r - 3, 0, Math.PI * 2)
         ctx.clip()
-
         if (img) {
-          // Draw profile photo
           ctx.drawImage(img, 0, 0, size, size)
         } else {
-          // Fallback: colored bg + emoji
           ctx.fillStyle = pin.notFound ? "#8e8e93" : pin.iconBg
           ctx.fillRect(0, 0, size, size)
           ctx.fillStyle = "white"
@@ -182,10 +175,7 @@ export default function FindEvan() {
           ctx.textBaseline = "middle"
           ctx.fillText(pin.emoji, cx, cy)
         }
-
         ctx.restore()
-
-        // Active ring
         if (active && !pin.notFound) {
           ctx.beginPath()
           ctx.arc(cx, cy, r, 0, Math.PI * 2)
@@ -193,11 +183,9 @@ export default function FindEvan() {
           ctx.lineWidth = 2.5
           ctx.stroke()
         }
-
         resolve(c)
       }
 
-      // Try loading photo from /pins/{id}.jpg
       if (!pin.notFound) {
         const img = new Image()
         img.onload = () => draw(img)
@@ -274,7 +262,6 @@ export default function FindEvan() {
               c.width = size; c.height = size
               const ctx = c.getContext("2d")!
               const cx = size / 2, cy = size / 2, r = size / 2 - 3
-
               ctx.shadowColor = "rgba(0,0,0,0.2)"
               ctx.shadowBlur = 5
               ctx.shadowOffsetY = 1
@@ -283,7 +270,6 @@ export default function FindEvan() {
               ctx.fillStyle = "white"
               ctx.fill()
               ctx.shadowColor = "transparent"
-
               ctx.save()
               ctx.beginPath()
               ctx.arc(cx, cy, r - 3, 0, Math.PI * 2)
@@ -291,21 +277,18 @@ export default function FindEvan() {
               ctx.fillStyle = "#8e8e93"
               ctx.fillRect(0, 0, size, size)
               ctx.fillStyle = "rgba(255,255,255,0.5)"
-              ctx.font = `bold 18px sans-serif`
+              ctx.font = "bold 18px sans-serif"
               ctx.textAlign = "center"
               ctx.textBaseline = "middle"
               ctx.fillText("📁", cx, cy)
               ctx.restore()
-
               ctx.beginPath()
-              ctx.arc(cx, cy, r - 1, angle, angle + Math.PI * 1.1)
+              ctx.arc(cx, cy, r - 1, angle, angle + Math.PI * 0.7)
               ctx.strokeStyle = "#30b94d"
-              ctx.lineWidth = 4
+              ctx.lineWidth = 2
               ctx.lineCap = "round"
               ctx.stroke()
-
               angle += 0.06
-
               const d = ctx.getImageData(0, 0, size, size)
               this.data = new Uint8Array(d.data.buffer)
               map.triggerRepaint()
@@ -380,9 +363,15 @@ export default function FindEvan() {
     const map = mapRef.current
     if (!map || !mapReady) return
 
-    map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins ? "visible" : "none")
+    map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && visitorPins.length > 0 ? "visible" : "none")
 
-    if (!showVisitorPins || visitorPins.length === 0) return
+    if (!showVisitorPins) return
+
+    // Clear map source immediately if no pins
+    if (visitorPins.length === 0) {
+      map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features: [] } as unknown as object)
+      return
+    }
 
     // Register each visitor pin image and build GeoJSON
     const registerAndRender = async () => {
@@ -391,45 +380,41 @@ export default function FindEvan() {
       for (const vp of visitorPins) {
         const imgId = `vpin-${vp.id}`
         if (!map.hasImage(imgId)) {
-          // Draw pixel art into a circular canvas
-          const size = 44
+          const vw = 52, vh = 52
           const c = document.createElement("canvas")
-          c.width = size; c.height = size
+          c.width = vw + 12; c.height = vh + 10
           const ctx = c.getContext("2d")!
-          const cx = size / 2, cy = size / 2, r = size / 2 - 2
+          const ox = 4, oy = 2
 
-          // White border
-          ctx.shadowColor = "rgba(0,0,0,0.25)"
-          ctx.shadowBlur = 5
-          ctx.shadowOffsetY = 1
-          ctx.beginPath()
-          ctx.arc(cx, cy, r, 0, Math.PI * 2)
-          ctx.fillStyle = "white"
-          ctx.fill()
-          ctx.shadowColor = "transparent"
-
-          // Clip and draw pixel art
+          // Drop shadow
           ctx.save()
-          ctx.beginPath()
-          ctx.arc(cx, cy, r - 2.5, 0, Math.PI * 2)
-          ctx.clip()
+          ctx.shadowColor = "rgba(0,0,0,0.22)"
+          ctx.shadowBlur = 5
+          ctx.shadowOffsetX = 1
+          ctx.shadowOffsetY = 3
+          const bodyGrad = ctx.createLinearGradient(ox, oy, ox, oy + vh)
+          bodyGrad.addColorStop(0, "#fef08a")
+          bodyGrad.addColorStop(0.5, "#fde047")
+          bodyGrad.addColorStop(1, "#facc15")
+          ctx.fillStyle = bodyGrad
+          ctx.fillRect(ox, oy, vw, vh)
+          ctx.restore()
 
+          // Pixel art
+          const pad = 6
           const img = new Image()
           img.src = vp.pixel_art
           await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res() })
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(ox + pad, oy + pad, vw - pad * 2, vh - pad * 2)
+          ctx.clip()
           ctx.imageSmoothingEnabled = false
-          ctx.drawImage(img, 0, 0, size, size)
+          ctx.drawImage(img, ox + pad, oy + pad, vw - pad * 2, vh - pad * 2)
           ctx.restore()
 
-          // Red ring
-          ctx.beginPath()
-          ctx.arc(cx, cy, r, 0, Math.PI * 2)
-          ctx.strokeStyle = "#ff3b30"
-          ctx.lineWidth = 2
-          ctx.stroke()
-
-          const d = ctx.getImageData(0, 0, size, size)
-          map.addImage(imgId, { width: size, height: size, data: new Uint8Array(d.data.buffer) })
+          const d = ctx.getImageData(0, 0, c.width, c.height)
+          map.addImage(imgId, { width: c.width, height: c.height, data: new Uint8Array(d.data.buffer) })
         }
 
         features.push({
@@ -440,6 +425,7 @@ export default function FindEvan() {
       }
 
       map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features } as unknown as object)
+    map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && features.length > 0 ? "visible" : "none")
     }
 
     registerAndRender()
@@ -469,59 +455,91 @@ export default function FindEvan() {
       <div className="main">
         {/* Sidebar */}
         <aside className="sidebar">
-          <div className="sidebar-scroll">
-
-            {/* Hero — Evan */}
-            <div
-              className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`}
-              onClick={() => handlePinClick("evan")}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <PinAvatar pin={PINS[0]} size={52} />
-                <div>
-                  <div className="hero-name">Evan Huang</div>
-                  <div className="hero-sub">Mathematics · UWaterloo<br />Software Dev · Network Infra</div>
+          {expandedPin ? (
+            // ── Expanded detail panel ──
+            <>
+              <div className="sidebar-scroll">
+                <div style={{ padding: "0.75rem 1rem 0" }}>
+                  <button onClick={() => setExpandedPin(null)} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    fontFamily: "var(--font-mono)", fontSize: "0.7rem",
+                    color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem",
+                    display: "flex", alignItems: "center", gap: 4,
+                  }}>‹ back</button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                    <PinAvatar pin={PINS.find(p => p.id === expandedPin)!} size={52} />
+                    <div>
+                      <div className="hero-name">{PINS.find(p => p.id === expandedPin)!.label}</div>
+                      <div className="hero-sub">{PINS.find(p => p.id === expandedPin)!.sub}</div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ padding: "0 1rem 1rem" }}>
+                  {expandedPin === "evan" && (
+                    <>
+                      <p style={{ fontSize: "0.8rem", color: "var(--ink-light)", lineHeight: 1.7, marginBottom: "0.75rem" }}>{siteConfig.bio}</p>
+                      <div className="hero-links">
+                        <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link">github ↗</a>
+                        <a href={`mailto:${siteConfig.links.email}`} className="hero-link">email ↗</a>
+                        <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link">linkedin ↗</a>
+                        <a href={siteConfig.links.resume} download className="hero-link">resume ↓</a>
+                      </div>
+                    </>
+                  )}
+                  {DETAIL[expandedPin]}
                 </div>
               </div>
-              <div className="hero-links" style={{ marginTop: "0.75rem" }}>
-                <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github ↗</a>
-                <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email ↗</a>
-                <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin ↗</a>
-                <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume ↓</a>
+              <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
+            </>
+          ) : (
+            // ── List view ──
+            <>
+              <div className="sidebar-scroll">
+                {/* Hero */}
+                <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`}
+                  onClick={() => { handlePinClick("evan"); setExpandedPin("evan") }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <PinAvatar pin={PINS[0]} size={52} />
+                    <div>
+                      <div className="hero-name">Evan Huang</div>
+                      <div className="hero-sub">Mathematics · UWaterloo<br />Software Dev · Network Infra</div>
+                    </div>
+                  </div>
+                  <div className="hero-links" style={{ marginTop: "0.75rem" }}>
+                    <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github ↗</a>
+                    <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email ↗</a>
+                    <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin ↗</a>
+                    <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume ↓</a>
+                  </div>
+                </div>
+
+                <div className="sidebar-divider" />
+                <div className="section-label">Education</div>
+                {PINS.filter((p) => p.id === "uow").map((pin) => (
+                  <PinRow key={pin.id} pin={pin} active={activePin === pin.id}
+                    onClick={() => { handlePinClick(pin.id); setExpandedPin(pin.id) }}
+                    detail={null} />
+                ))}
+
+                <div className="sidebar-divider" />
+                <div className="section-label">Experience</div>
+                {PINS.filter((p) => p.id === "blackberry" || p.id === "compugen").map((pin) => (
+                  <PinRow key={pin.id} pin={pin} active={activePin === pin.id}
+                    onClick={() => { handlePinClick(pin.id); setExpandedPin(pin.id) }}
+                    detail={null} />
+                ))}
+
+                <div className="sidebar-divider" />
+                <div className="section-label">Projects</div>
+                {PINS.filter((p) => p.id === "projects").map((pin) => (
+                  <PinRow key={pin.id} pin={pin} active={activePin === pin.id}
+                    onClick={() => { handlePinClick(pin.id); setExpandedPin(pin.id) }}
+                    detail={null} />
+                ))}
               </div>
-            </div>
-            {activePin === "evan" && DETAIL.evan}
-
-            <div className="sidebar-divider" />
-
-            {/* Education */}
-            <div className="section-label">Education</div>
-            {PINS.filter((p) => p.id === "uow").map((pin) => (
-              <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => handlePinClick(pin.id)} detail={DETAIL[pin.id]} />
-            ))}
-
-            <div className="sidebar-divider" />
-
-            {/* Experience */}
-            <div className="section-label">Experience</div>
-            {PINS.filter((p) => p.id === "blackberry" || p.id === "compugen").map((pin) => (
-              <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => handlePinClick(pin.id)} detail={DETAIL[pin.id]} />
-            ))}
-
-            <div className="sidebar-divider" />
-
-            {/* Projects */}
-            <div className="section-label">Projects</div>
-            {PINS.filter((p) => p.id === "projects").map((pin) => (
-              <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => handlePinClick(pin.id)} detail={DETAIL[pin.id]} />
-            ))}
-
-          </div>
-          <VisitorFooter
-            showPins={showVisitorPins}
-            onToggle={setShowVisitorPins}
-            onPinsLoaded={setVisitorPins}
-          />
+              <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
+            </>
+          )}
         </aside>
         <div className="map-wrap">
           <div id="mapbox-container" />
@@ -538,25 +556,21 @@ export default function FindEvan() {
 
 function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   const [err, setErr] = useState(false)
-  const isAnimated = pin.notFound
 
-  if (isAnimated) {
+  if (pin.notFound) {
     return (
       <div style={{
         width: size, height: size, borderRadius: "50%",
         background: "#8e8e93", border: "2px solid white",
         boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: size * 0.45, flexShrink: 0,
-        position: "relative", overflow: "hidden",
+        fontSize: size * 0.45, flexShrink: 0, position: "relative", overflow: "hidden",
       }}>
         <span style={{ filter: "brightness(0) invert(0.5)" }}>📁</span>
         <div style={{
-          position: "absolute", inset: -2,
-          borderRadius: "50%",
-          border: `2.5px solid transparent`,
-          borderTopColor: "#30b94d",
-          borderRightColor: "#30b94d",
+          position: "absolute", inset: -2, borderRadius: "50%",
+          border: "2.5px solid transparent",
+          borderTopColor: "#30b94d", borderRightColor: "#30b94d",
           animation: "spin 1s linear infinite",
         }} />
       </div>
@@ -566,20 +580,15 @@ function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%",
-      border: "2px solid white",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
-      overflow: "hidden", flexShrink: 0,
-      background: pin.iconBg,
+      border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+      overflow: "hidden", flexShrink: 0, background: pin.iconBg,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontSize: size * 0.45,
     }}>
       {!err ? (
-        <img
-          src={`/pins/${pin.id}.jpg`}
-          alt={pin.label}
+        <img src={`/pins/${pin.id}.jpg`} alt={pin.label}
           onError={() => setErr(true)}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       ) : (
         <span>{pin.emoji}</span>
       )}
