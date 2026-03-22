@@ -66,16 +66,32 @@ export default function VisitorFooter({
 
   async function handleAdd() {
     setError(null)
-    // If editing, skip geolocation — reuse existing coords from the stored pin
-    if (hasPin && existingArt) {
-      setShowDrawer(true)
-      return
+
+    if (hasPin) {
+      // Editing — fetch existing pin coords from DB, no geolocation needed
+      const myId = getCookie(COOKIE)
+      if (myId) {
+        try {
+          const res = await fetch("/api/visitor-pins")
+          const data: VisitorPin[] = await res.json()
+          const mine = data.find((p) => p.id === myId)
+          if (mine) {
+            setPendingCoords({ lat: mine.lat, lng: mine.lng })
+            setExistingArt(mine.pixel_art)
+            setShowDrawer(true)
+            return
+          }
+        } catch {}
+      }
+      // Cookie exists but pin not found — treat as new
+      setHasPin(false)
+      deleteCookie(COOKIE)
     }
+
     setLocating(true)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false)
-        // Fuzz to ~1km precision
         setPendingCoords({
           lat: fuzzyCoord(pos.coords.latitude),
           lng: fuzzyCoord(pos.coords.longitude),
@@ -92,10 +108,11 @@ export default function VisitorFooter({
   }
 
   async function handleSubmit(dataUrl: string) {
+    if (!pendingCoords) { setError("Missing location."); return }
     setSubmitting(true)
     setShowDrawer(false)
 
-    // If editing an existing pin — delete first, then re-add
+    // If editing — delete old pin first
     if (hasPin) {
       const id = getCookie(COOKIE)
       if (id) {
@@ -108,23 +125,11 @@ export default function VisitorFooter({
       deleteCookie(COOKIE)
     }
 
-    // If editing, we don't have pendingCoords — fetch existing coords from pins
-    let coords = pendingCoords
-    if (!coords) {
-      const myId = getCookie(COOKIE)
-      const res = await fetch("/api/visitor-pins")
-      const pins: VisitorPin[] = await res.json()
-      const mine = pins.find((p) => p.id === myId)
-      if (mine) coords = { lat: mine.lat, lng: mine.lng }
-    }
-
-    if (!coords) { setError("Couldn't get location."); setSubmitting(false); return }
-
     try {
       const res = await fetch("/api/visitor-pins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...coords, pixel_art: dataUrl }),
+        body: JSON.stringify({ ...pendingCoords, pixel_art: dataUrl }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
