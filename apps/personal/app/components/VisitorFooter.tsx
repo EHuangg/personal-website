@@ -191,13 +191,20 @@ export default function VisitorFooter({
           <span style={{ fontSize: "0.72rem", color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
             {count === null ? "loading..." : `${count} ${count === 1 ? "person" : "people"} left a mark`}
           </span>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: "0.68rem", color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>show stickies</span>
-            <div onClick={() => onToggle(!showPins)} style={{
+            <button
+              type="button"
+              aria-label={showPins ? "Hide sticky notes" : "Show sticky notes"}
+              onClick={() => onToggle(!showPins)}
+              style={{
               width: 36, height: 20, borderRadius: 10,
               background: showPins ? "var(--blue)" : "#c8b89a",
+              border: "none",
               position: "relative", cursor: "pointer",
               transition: "background 0.2s",
+              padding: 0,
+              WebkitTapHighlightColor: "transparent",
             }}>
               <div style={{
                 position: "absolute", top: 2,
@@ -206,8 +213,8 @@ export default function VisitorFooter({
                 background: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
                 transition: "left 0.2s",
               }} />
-            </div>
-          </label>
+            </button>
+          </div>
         </div>
 
         {error && <div style={{ fontSize: "0.68rem", color: "#ff3b30", marginBottom: "0.4rem", fontFamily: "var(--font-mono)" }}>{error}</div>}

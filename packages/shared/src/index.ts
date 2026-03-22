@@ -34,7 +34,7 @@ export const siteConfig = {
   projects: [
     {
       name: "this website",
-      description: "A personal site slowly being rewritten by strangers on the internet.",
+      description: "My porfolio website",
       url: "https://github.com/EHuangg/personal-website",
       tags: ["Next.js", "TypeScript", "PostgreSQL"],
     },

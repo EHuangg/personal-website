@@ -158,6 +158,43 @@ function loadMapbox(): Promise<void> {
   })
 }
 
+const SIDEBAR_MAP_STYLE = {
+  version: 8,
+  glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}",
+  sources: {
+    "mapbox-streets": {
+      type: "vector",
+      url: "mapbox://mapbox.mapbox-streets-v8",
+    },
+  },
+  layers: [
+    { id: "background", type: "background", paint: { "background-color": "#f5f0e8" } },
+    { id: "water", type: "fill", source: "mapbox-streets", "source-layer": "water", paint: { "fill-color": "#ddd2bf" } },
+    { id: "parks", type: "fill", source: "mapbox-streets", "source-layer": "landuse", filter: ["==", "class", "park"], paint: { "fill-color": "#ebe2d4" } },
+    { id: "roads-minor", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "street", "street_limited", "service"], paint: { "line-color": "#c8b89a", "line-width": 0.7 } },
+    { id: "roads-major", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "primary", "secondary", "tertiary"], paint: { "line-color": "#b39f82", "line-width": 1.3 } },
+    { id: "roads-highway", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "motorway", "trunk"], paint: { "line-color": "#927f66", "line-width": 2.2 } },
+    { id: "building", type: "fill", source: "mapbox-streets", "source-layer": "building", paint: { "fill-color": "#e8decd", "fill-outline-color": "#c8b89a" } },
+    {
+      id: "road-labels",
+      type: "symbol",
+      source: "mapbox-streets",
+      "source-layer": "road",
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": ["DIN Pro Regular", "Arial Unicode MS Regular"],
+        "text-size": 10,
+        "symbol-placement": "line",
+      },
+      paint: {
+        "text-color": "#6a5a42",
+        "text-halo-color": "#f5f0e8",
+        "text-halo-width": 1,
+      },
+    },
+  ],
+}
+
 // ── Clock ──────────────────────────────────────────────────────────────────────
 
 function Clock() {
@@ -277,7 +314,7 @@ export default function FindEvan() {
       window.mapboxgl.accessToken = token
       const map = new window.mapboxgl.Map({
         container: "mapbox-container",
-        style: "mapbox://styles/mapbox/streets-v12",
+        style: SIDEBAR_MAP_STYLE as unknown as object,
         center: [PINS[0].lng, PINS[0].lat],
         zoom: PINS[0].zoom,
         attributionControl: false,

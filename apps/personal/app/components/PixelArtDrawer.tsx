@@ -114,7 +114,9 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
         background: "#f5f0e8",
         borderRadius: 16,
         padding: "1.25rem",
-        width: 380,
+        width: "min(380px, 92vw)",
+        maxHeight: "90vh",
+        overflowY: "auto",
         boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
         fontFamily: "'IBM Plex Mono', monospace",
       }}>
@@ -138,21 +140,26 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
               border: "1px solid #c8b89a",
               cursor: erasing ? "cell" : "crosshair",
               imageRendering: "pixelated",
+              touchAction: "none",
             }}
             onMouseDown={(e) => { setDrawing(true); paint(e.clientX, e.clientY) }}
             onMouseMove={(e) => { if (drawing) paint(e.clientX, e.clientY) }}
             onMouseUp={() => setDrawing(false)}
             onMouseLeave={() => setDrawing(false)}
             onTouchStart={(e) => {
+              e.preventDefault()
               setDrawing(true)
               const t = e.touches[0]
               paint(t.clientX, t.clientY)
             }}
             onTouchMove={(e) => {
+              e.preventDefault()
+              if (!drawing) return
               const t = e.touches[0]
               paint(t.clientX, t.clientY)
             }}
             onTouchEnd={() => setDrawing(false)}
+            onTouchCancel={() => setDrawing(false)}
           />
         </div>
 
