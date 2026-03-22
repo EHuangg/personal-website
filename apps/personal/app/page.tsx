@@ -106,11 +106,6 @@ function EvanDetail() {
   return (
     <div className="pin-detail">
       <p className="pin-detail-bio">{siteConfig.bio}</p>
-      <div className="pin-detail-tags" style={{ marginTop: "0.5rem" }}>
-        {["Python", "TypeScript", "Next.js", "PostgreSQL", "AWS", "Linux"].map((t) => (
-          <span key={t} className="pin-detail-tag">{t}</span>
-        ))}
-      </div>
     </div>
   )
 }
@@ -138,6 +133,7 @@ type MapboxMap = {
   removeImage: (id: string) => void
   triggerRepaint: () => void
   getSource: (id: string) => { setData: (data: object) => void } | undefined
+  hasLayer: (id: string) => boolean
   setLayoutProperty: (layer: string, prop: string, value: unknown) => void
   on: (event: string, layerId: string | (() => void), cb?: (e: { features?: { properties?: { id?: string } }[] }) => void) => void
   getCanvas: () => HTMLCanvasElement
@@ -258,9 +254,12 @@ export default function FindEvan() {
       if (next) {
         const pin = PINS.find((p) => p.id === id)!
         mapRef.current?.flyTo({ center: [pin.lng, pin.lat], zoom: pin.zoom, duration: 1200, essential: true })
-        setExpandedPin(id)
+        if (id !== "projects") setExpandedPin(id)
+        else setExpandedPin(null)
       } else {
         setExpandedPin(null)
+        const prev_pin = PINS.find((p) => p.id === id)!
+        mapRef.current?.flyTo({ center: [prev_pin.lng, prev_pin.lat], zoom: prev_pin.zoom - 2, duration: 900, essential: true })
       }
       mapRef.current?.getSource("pins")?.setData(geojsonData(next) as unknown as object)
       return next
@@ -354,7 +353,9 @@ export default function FindEvan() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
-    map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && visitorPins.length > 0 ? "visible" : "none")
+    try {
+      map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && visitorPins.length > 0 ? "visible" : "none")
+    } catch { return } // layer not yet re-added after style switch
     if (!showVisitorPins) return
     if (visitorPins.length === 0) {
       map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features: [] } as unknown as object)
@@ -383,7 +384,7 @@ export default function FindEvan() {
         features.push({ type: "Feature", geometry: { type: "Point", coordinates: [vp.lng, vp.lat] }, properties: { icon: `vpin-${vp.id}` } })
       }
       map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features } as unknown as object)
-      map.setLayoutProperty("visitor-pins-layer", "visibility", features.length > 0 ? "visible" : "none")
+      try { map.setLayoutProperty("visitor-pins-layer", "visibility", features.length > 0 ? "visible" : "none") } catch {}
     }
     registerAndRender()
   }, [showVisitorPins, visitorPins, mapReady])
@@ -395,7 +396,7 @@ export default function FindEvan() {
   return (
     <div className="app">
       <div className="topbar">
-        <span className="topbar-icon">📍</span>
+        <img src="/favicon.png" alt="icon" style={{ width: 24, height: 24, imageRendering: "pixelated" }} />
         <span className="topbar-title">Find Evan</span>
         <span className="topbar-subtitle">evan-huang.dev</span>
       </div>
@@ -471,6 +472,12 @@ export default function FindEvan() {
               </div>
 
               <div className="sidebar-divider" />
+              <div style={{ padding: "0.5rem 1rem", display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {["Python", "TypeScript", "Next.js", "PostgreSQL", "AWS", "Linux"].map((t) => (
+                  <span key={t} className="pin-detail-tag">{t}</span>
+                ))}
+              </div>
+              <div className="sidebar-divider" />
               <div className="section-label">Education</div>
               {PINS.filter(p => p.id === "uow").map(pin => (
                 <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
@@ -480,7 +487,7 @@ export default function FindEvan() {
               <div className="section-label">Experience</div>
               {PINS.filter(p => p.id === "blackberry" || p.id === "compugen").map(pin => {
                 const job = siteConfig.experience.find(j => j.company.toLowerCase().includes(pin.id === "blackberry" ? "black" : "comp"))
-                return <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} period={job?.period} />
+                return <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} role={job?.role} date={job?.period} />
               })}
 
               <div className="sidebar-divider" />
@@ -488,6 +495,7 @@ export default function FindEvan() {
               {PINS.filter(p => p.id === "projects").map(pin => (
                 <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
               ))}
+              {activePin === "projects" && <ProjectsDetail />}
             </div>
             <Clock />
             <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
@@ -528,21 +536,22 @@ function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   )
 }
 
-function PinRow({ pin, active, onClick, period }: { pin: Pin; active: boolean; onClick: () => void; period?: string }) {
+function PinRow({ pin, active, onClick, role, date }: { pin: Pin; active: boolean; onClick: () => void; role?: string; date?: string }) {
   return (
     <div className={`pin-card ${active ? "pin-card--active" : ""}`} onClick={onClick}>
       <PinAvatar pin={pin} size={36} />
       <div className="pin-card-body">
-        <div className="pin-card-name">{pin.label}</div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
+          <div className="pin-card-name" style={{ flexShrink: 0 }}>{pin.label}</div>
+          {date && <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--ink-muted)", whiteSpace: "nowrap" }}>{date}</span>}
+        </div>
         <div className="pin-card-sub">
           {pin.notFound ? (
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
               Location not found
             </span>
-          ) : period ? (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem" }}>{period}</span>
-          ) : pin.sub}
+          ) : role ?? pin.sub}
         </div>
       </div>
       <span className="pin-chevron">›</span>
