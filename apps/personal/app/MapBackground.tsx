@@ -65,7 +65,11 @@ export default function MapBackground({ children }: { children: React.ReactNode 
   // Init maps
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-    if (!token || !bgRef.current || !cutoutRef.current) return
+    if (!token || !bgRef.current || !cutoutRef.current) {
+      console.warn("[MapBackground] Missing token or refs", { token: !!token, bg: !!bgRef.current, cut: !!cutoutRef.current })
+      return
+    }
+    console.log("[MapBackground] Initializing maps with token:", token.slice(0, 10) + "...")
     let cancelled = false
 
     import("mapbox-gl").then(({ default: mapboxgl }) => {
