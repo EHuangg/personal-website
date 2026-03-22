@@ -38,6 +38,7 @@ const PAPER_STYLE = {
 }
 
 export default function MapBackground({ children }: { children: React.ReactNode }) {
+  const mapsEnabled = process.env.NODE_ENV !== "development" || process.env.NEXT_PUBLIC_ENABLE_MAP_DEV === "1"
   const bgRef = useRef<HTMLDivElement>(null)
   const cutoutRef = useRef<HTMLDivElement>(null)
   const bgMap = useRef<MapboxMap | null>(null)
@@ -62,19 +63,14 @@ export default function MapBackground({ children }: { children: React.ReactNode 
     if (el) setCutoutEl(el)
   }, [])
 
-  // Init maps
+  // Init background map
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-    if (!token || !bgRef.current || !cutoutRef.current) {
-      console.warn("[MapBackground] Missing token or refs", { token: !!token, bg: !!bgRef.current, cut: !!cutoutRef.current })
-      return
-    }
-    console.log("[MapBackground] Initializing maps with token:", token.slice(0, 10) + "...")
+    if (!mapsEnabled || !token || !bgRef.current) return
     let cancelled = false
 
     import("mapbox-gl").then(({ default: mapboxgl }) => {
-      if (cancelled) return
-      
+      if (cancelled || bgMap.current) return
       mapboxgl.accessToken = token
 
       const bg = new mapboxgl.Map({
@@ -85,6 +81,33 @@ export default function MapBackground({ children }: { children: React.ReactNode 
         attributionControl: false,
       }) as unknown as MapboxMap
 
+      bg.on("move", () => {
+        if (syncing.current || !cutoutMap.current) return
+        syncing.current = true
+        cutoutMap.current.jumpTo({ center: bg.getCenter(), zoom: bg.getZoom(), bearing: bg.getBearing(), pitch: bg.getPitch() })
+        syncing.current = false
+      })
+
+      bgMap.current = bg
+    })
+
+    return () => {
+      cancelled = true
+      bgMap.current?.remove()
+      bgMap.current = null
+    }
+  }, [mapsEnabled])
+
+  // Init cutout map once portal is mounted
+  useEffect(() => {
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+    if (!mapsEnabled || !token || !cutoutEl || !cutoutRef.current) return
+    let cancelled = false
+
+    import("mapbox-gl").then(({ default: mapboxgl }) => {
+      if (cancelled || cutoutMap.current) return
+      mapboxgl.accessToken = token
+
       const cut = new mapboxgl.Map({
         container: cutoutRef.current!,
         style: PAPER_STYLE as unknown as mapboxgl.Style,
@@ -94,40 +117,43 @@ export default function MapBackground({ children }: { children: React.ReactNode 
         attributionControl: false,
       }) as unknown as MapboxMap
 
-      bg.on("move", () => {
-        if (syncing.current) return
-        syncing.current = true
-        cut.jumpTo({ center: bg.getCenter(), zoom: bg.getZoom(), bearing: bg.getBearing(), pitch: bg.getPitch() })
-        syncing.current = false
-      })
-
-      bgMap.current = bg
       cutoutMap.current = cut
     })
 
     return () => {
       cancelled = true
-      bgMap.current?.remove()
       cutoutMap.current?.remove()
-      bgMap.current = null
       cutoutMap.current = null
     }
-  }, [])
+  }, [cutoutEl, mapsEnabled])
 
   return (
     <>
       {/* Full-page blurred background map */}
       <div style={{ position: "fixed", inset: 0, zIndex: 0 }}>
-        <div ref={bgRef} style={{ width: "100%", height: "100%" }} />
-        {/* Vignette blur overlay */}
-        <div style={{
-          position: "absolute", inset: 0,
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          maskImage: "radial-gradient(ellipse 65% 65% at 50% 50%, black 0%, transparent 60%, black 80%)",
-          WebkitMaskImage: "radial-gradient(ellipse 65% 65% at 50% 50%, black 0%, transparent 60%, black 80%)",
-          pointerEvents: "none",
-        }} />
+        {mapsEnabled ? (
+          <>
+            <div ref={bgRef} style={{ width: "100%", height: "100%" }} />
+            {/* Vignette blur overlay */}
+            <div style={{
+              position: "absolute", inset: 0,
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              maskImage: "radial-gradient(ellipse 65% 65% at 50% 50%, black 0%, transparent 60%, black 80%)",
+              WebkitMaskImage: "radial-gradient(ellipse 65% 65% at 50% 50%, black 0%, transparent 60%, black 80%)",
+              pointerEvents: "none",
+            }} />
+          </>
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "radial-gradient(circle at 20% 20%, rgba(200,184,154,0.35), transparent 45%), linear-gradient(180deg, #efe7da 0%, #e7dccb 100%)",
+            }}
+          />
+        )}
         {/* Paper tint */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(245,240,232,0.5)", pointerEvents: "none" }} />
       </div>
@@ -140,7 +166,18 @@ export default function MapBackground({ children }: { children: React.ReactNode 
       {/* Sharp cutout map — portalled directly into the placeholder div */}
       {cutoutEl && createPortal(
         <div style={{ position: "relative", width: "100%", height: "100%" }}>
-          <div ref={cutoutRef} style={{ width: "100%", height: "100%" }} />
+          {mapsEnabled ? (
+            <div ref={cutoutRef} style={{ width: "100%", height: "100%" }} />
+          ) : (
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                background:
+                  "linear-gradient(135deg, rgba(200,184,154,0.45) 0%, rgba(237,232,222,0.9) 55%, rgba(184,168,138,0.4) 100%)",
+              }}
+            />
+          )}
 
           {/* Pin */}
           <div style={{
