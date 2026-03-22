@@ -70,13 +70,12 @@ export default function MapBackground({ children }: { children: React.ReactNode 
 
     import("mapbox-gl").then(({ default: mapboxgl }) => {
       if (cancelled) return
-      // @ts-expect-error mapbox token
+      
       mapboxgl.accessToken = token
 
       const bg = new mapboxgl.Map({
         container: bgRef.current!,
-        // @ts-expect-error custom style
-        style: PAPER_STYLE,
+        style: PAPER_STYLE as unknown as mapboxgl.Style,
         center: [TORONTO_LNG, TORONTO_LAT],
         zoom: 13,
         attributionControl: false,
@@ -84,8 +83,7 @@ export default function MapBackground({ children }: { children: React.ReactNode 
 
       const cut = new mapboxgl.Map({
         container: cutoutRef.current!,
-        // @ts-expect-error custom style
-        style: PAPER_STYLE,
+        style: PAPER_STYLE as unknown as mapboxgl.Style,
         center: [TORONTO_LNG, TORONTO_LAT],
         zoom: 13,
         interactive: false,
