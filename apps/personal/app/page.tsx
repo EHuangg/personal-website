@@ -6,7 +6,7 @@ import { siteConfig } from "@personal-website/shared"
 
 const VisitorFooter = dynamic(() => import("./components/VisitorFooter"), { ssr: false })
 
-// ── Pin data ──────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type PinId = "evan" | "uow" | "blackberry" | "compugen" | "projects"
 
@@ -24,67 +24,98 @@ type Pin = {
 }
 
 const PINS: Pin[] = [
-  { id: "evan",       label: "Evan Huang",              sub: "Oakville, ON",                          icon: "🏠", emoji: "👤", iconBg: "#0a84ff", lng: -79.6877, lat: 43.4675, zoom: 13 },
-  { id: "uow",        label: "University of Waterloo",  sub: "Waterloo, ON · B.Sc Mathematics",       icon: "🎓", emoji: "🎓", iconBg: "#ff9500", lng: -80.5448, lat: 43.4723, zoom: 15 },
-  { id: "blackberry", label: "BlackBerry",              sub: "Waterloo, ON · Network Engineer Intern", icon: "💼", emoji: "🫐", iconBg: "#30b94d", lng: -80.5134953274364, lat: 43.517182158766694, zoom: 15 },
-  { id: "compugen",   label: "Compugen Inc.",           sub: "Richmond Hill, ON · Network Ops Intern", icon: "💼", emoji: "🖥",  iconBg: "#30b94d", lng: -79.38721826149013, lat: 43.88987797031746, zoom: 14 },
-  { id: "projects",   label: "Projects",                sub: "Location not found",                    icon: "📁", emoji: "⚡", iconBg: "#8e8e93", lng: -150.0000, lat: 20.0000, zoom: 4,  notFound: true },
+  { id: "evan",       label: "Evan Huang",             sub: "Oakville, ON",                           icon: "🏠", emoji: "👤", iconBg: "#0a84ff", lng: -79.6877,           lat: 43.4675,           zoom: 13 },
+  { id: "uow",        label: "University of Waterloo", sub: "Waterloo, ON · B.Sc. Mathematics",        icon: "🎓", emoji: "🎓", iconBg: "#ff9500", lng: -80.5448,           lat: 43.4723,           zoom: 15 },
+  { id: "blackberry", label: "BlackBerry",             sub: "Waterloo, ON · Network Engineer Intern",  icon: "💼", emoji: "🫐", iconBg: "#30b94d", lng: -80.5134953274364,  lat: 43.517182158766694, zoom: 15 },
+  { id: "compugen",   label: "Compugen Inc.",          sub: "Richmond Hill, ON · Network Ops Intern",  icon: "💼", emoji: "🖥",  iconBg: "#30b94d", lng: -79.38721826149013, lat: 43.88987797031746,  zoom: 14 },
+  { id: "projects",   label: "Projects",               sub: "Location not found",                     icon: "📁", emoji: "⚡", iconBg: "#8e8e93", lng: -150.0,             lat: 20.0,              zoom: 4, notFound: true },
 ]
 
-const DETAIL: Record<PinId, React.ReactNode> = {
-  evan: (
+// ── Courses ───────────────────────────────────────────────────────────────────
+
+type Course = { code: string; name: string; url: string; tags: string[] }
+
+const COURSES: Course[] = [
+  { code: "CS 136",   name: "Elementary Algorithm Design and Data Abstraction", url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS136",   tags: ["C"] },
+  { code: "CS 234",   name: "Data Types and Structures",                        url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS234",   tags: ["Python"] },
+  { code: "CS 338",   name: "Computer Applications in Business: Databases",     url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS338",   tags: ["SQL"] },
+  { code: "CS 430",   name: "Applications Software Engineering",                url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS430",   tags: ["Python"] },
+  { code: "CS 431",   name: "Data-Intensive Distributed Analytics",             url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS431",   tags: ["Python", "Spark", "Git"] },
+  { code: "STAT 341", name: "Computational Statistics and Data Analysis",       url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-STAT.html#STAT341", tags: ["R"] },
+]
+
+// ── Detail content ─────────────────────────────────────────────────────────────
+
+function UoWDetail() {
+  return (
+    <div className="pin-detail">
+      <p className="pin-detail-meta">Sep 2020 – Dec 2025</p>
+      <p className="pin-detail-meta">B.Sc. Mathematics · Economics Minor</p>
+      <p className="pin-detail-bio" style={{ marginBottom: "0.75rem" }}>Relevant coursework:</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        {COURSES.map((c) => (
+          <div key={c.code} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "5px 0", borderBottom: "0.5px solid var(--ink-faint)", flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)", flexShrink: 0, minWidth: 60 }}>{c.code}</span>
+            <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.76rem", color: "var(--blue)", textDecoration: "none", flex: 1, minWidth: 0 }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline" }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none" }}>
+              {c.name}
+            </a>
+            <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+              {c.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ExperienceDetail({ job }: { job: typeof siteConfig.experience[0] }) {
+  return (
+    <div className="pin-detail">
+      <p className="pin-detail-meta">{job.period}</p>
+      <ul className="pin-detail-points">
+        {job.points.map((p, i) => <li key={i}>{p}</li>)}
+      </ul>
+      <div className="pin-detail-tags">
+        {job.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
+      </div>
+    </div>
+  )
+}
+
+function ProjectsDetail() {
+  return (
+    <div className="pin-detail">
+      <p className="pin-detail-bio" style={{ marginBottom: "0.75rem", fontStyle: "italic" }}>Location not found — searching…</p>
+      {siteConfig.projects.map((p) => (
+        <div key={p.name} style={{ marginBottom: "0.9rem" }}>
+          <a href={p.url} target="_blank" rel="noopener noreferrer" className="pin-detail-link">{p.name} ↗</a>
+          <p className="pin-detail-bio" style={{ marginTop: "0.2rem" }}>{p.description}</p>
+          <div className="pin-detail-tags" style={{ marginTop: "0.3rem" }}>
+            {p.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EvanDetail() {
+  return (
     <div className="pin-detail">
       <p className="pin-detail-bio">{siteConfig.bio}</p>
-      <div className="pin-detail-tags">
-        {["Python", "JavaScript", "TypeScript", "Node.js", "React", "SQL", "AWS", "Linux"].map((t) => (
+      <div className="pin-detail-tags" style={{ marginTop: "0.5rem" }}>
+        {["Python", "TypeScript", "Next.js", "PostgreSQL", "AWS", "Linux"].map((t) => (
           <span key={t} className="pin-detail-tag">{t}</span>
         ))}
       </div>
     </div>
-  ),
-  uow: (
-    <div className="pin-detail">
-      <p className="pin-detail-meta">Sep 2020 – Dec 2025</p>
-      <p className="pin-detail-bio">Honours Bachelor of Science in Mathematics. Coursework in software engineering, distributed analytics, algorithms, databases, and linear optimization.</p>
-    </div>
-  ),
-  blackberry: (
-    <div className="pin-detail">
-      <p className="pin-detail-meta">Jan 2024 – Aug 2024</p>
-      <ul className="pin-detail-points">
-        {siteConfig.experience[0].points.map((p, i) => <li key={i}>{p}</li>)}
-      </ul>
-      <div className="pin-detail-tags">
-        {siteConfig.experience[0].tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
-      </div>
-    </div>
-  ),
-  compugen: (
-    <div className="pin-detail">
-      <p className="pin-detail-meta">Apr 2022 – Dec 2022</p>
-      <ul className="pin-detail-points">
-        {siteConfig.experience[1].points.map((p, i) => <li key={i}>{p}</li>)}
-      </ul>
-      <div className="pin-detail-tags">
-        {siteConfig.experience[1].tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
-      </div>
-    </div>
-  ),
-  projects: (
-    <div className="pin-detail">
-      {siteConfig.projects.map((p) => (
-        <div key={p.name} style={{ marginBottom: "0.75rem" }}>
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="pin-detail-link">
-            {p.name} ↗
-          </a>
-          <p className="pin-detail-bio" style={{ marginTop: "0.2rem" }}>{p.description}</p>
-        </div>
-      ))}
-    </div>
-  ),
+  )
 }
 
-// ── Map helpers ───────────────────────────────────────────────────────────────
+// ── Map helpers ────────────────────────────────────────────────────────────────
 
 declare global {
   interface Window {
@@ -131,7 +162,34 @@ function loadMapbox(): Promise<void> {
   })
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Clock ──────────────────────────────────────────────────────────────────────
+
+function Clock() {
+  const [time, setTime] = useState("")
+  useEffect(() => {
+    const tick = () => setTime(new Date().toLocaleTimeString("en-CA", {
+      timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    }))
+    tick()
+    const t = setInterval(tick, 1000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div style={{
+      padding: "0.4rem 0.75rem",
+      background: "rgba(200,184,154,0.15)",
+      borderTop: "0.5px solid var(--ink-faint)",
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)",
+      flexShrink: 0,
+    }}>
+      <span>EST / Toronto</span>
+      <span style={{ color: "var(--ink)", letterSpacing: "0.06em" }}>{time}</span>
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
@@ -141,7 +199,15 @@ export default function FindEvan() {
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
 
-  // Draw a circular pin — returns Promise<canvas>
+  const geojsonData = useCallback((active: PinId | null) => ({
+    type: "FeatureCollection",
+    features: PINS.map((pin) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
+      properties: { id: pin.id, icon: `pin-${pin.id}-${pin.id === active ? "active" : "idle"}` },
+    })),
+  }), [])
+
   const drawPinImage = useCallback((pin: Pin, active: boolean): Promise<HTMLCanvasElement> => {
     return new Promise((resolve) => {
       const size = active ? 80 : 60
@@ -155,15 +221,11 @@ export default function FindEvan() {
         ctx.shadowColor = "rgba(0,0,0,0.28)"
         ctx.shadowBlur = active ? 10 : 6
         ctx.shadowOffsetY = 2
-        ctx.beginPath()
-        ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.fillStyle = "white"
-        ctx.fill()
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        ctx.fillStyle = "white"; ctx.fill()
         ctx.shadowColor = "transparent"
         ctx.save()
-        ctx.beginPath()
-        ctx.arc(cx, cy, r - 3, 0, Math.PI * 2)
-        ctx.clip()
+        ctx.beginPath(); ctx.arc(cx, cy, r - 3, 0, Math.PI * 2); ctx.clip()
         if (img) {
           ctx.drawImage(img, 0, 0, size, size)
         } else {
@@ -171,43 +233,39 @@ export default function FindEvan() {
           ctx.fillRect(0, 0, size, size)
           ctx.fillStyle = "white"
           ctx.font = `bold ${active ? 26 : 19}px sans-serif`
-          ctx.textAlign = "center"
-          ctx.textBaseline = "middle"
+          ctx.textAlign = "center"; ctx.textBaseline = "middle"
           ctx.fillText(pin.emoji, cx, cy)
         }
         ctx.restore()
         if (active && !pin.notFound) {
-          ctx.beginPath()
-          ctx.arc(cx, cy, r, 0, Math.PI * 2)
-          ctx.strokeStyle = pin.iconBg
-          ctx.lineWidth = 2.5
-          ctx.stroke()
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
+          ctx.strokeStyle = pin.iconBg; ctx.lineWidth = 2.5; ctx.stroke()
         }
         resolve(c)
       }
-
       if (!pin.notFound) {
         const img = new Image()
-        img.onload = () => draw(img)
-        img.onerror = () => draw()
+        img.onload = () => draw(img); img.onerror = () => draw()
         img.src = `/pins/${pin.id}.jpg`
-      } else {
-        draw()
-      }
+      } else { draw() }
     })
   }, [])
 
-  const geojsonData = useCallback((active: PinId | null) => ({
-    type: "FeatureCollection",
-    features: PINS.map((pin) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
-      properties: {
-        id: pin.id,
-        icon: `pin-${pin.id}-${pin.id === active ? "active" : "idle"}`,
-      },
-    })),
-  }), [])
+  // Sync/toggle a pin — used by both sidebar clicks and map clicks
+  const togglePin = useCallback((id: PinId) => {
+    setActivePin((prev) => {
+      const next = prev === id ? null : id
+      if (next) {
+        const pin = PINS.find((p) => p.id === id)!
+        mapRef.current?.flyTo({ center: [pin.lng, pin.lat], zoom: pin.zoom, duration: 1200, essential: true })
+        setExpandedPin(id)
+      } else {
+        setExpandedPin(null)
+      }
+      mapRef.current?.getSource("pins")?.setData(geojsonData(next) as unknown as object)
+      return next
+    })
+  }, [geojsonData])
 
   // Init map
   useEffect(() => {
@@ -218,7 +276,6 @@ export default function FindEvan() {
     loadMapbox().then(() => {
       if (cancelled || mapRef.current) return
       window.mapboxgl.accessToken = token
-
       const map = new window.mapboxgl.Map({
         container: "mapbox-container",
         style: "mapbox://styles/mapbox/streets-v12",
@@ -226,31 +283,22 @@ export default function FindEvan() {
         zoom: PINS[0].zoom,
         attributionControl: false,
       })
-
       map.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), "bottom-right")
 
       map.on("load", () => {
         if (cancelled) return
-
-        // Register all pin images — await async image loading
         const registerAll = PINS.filter(p => !p.notFound).flatMap((pin) =>
           (["idle", "active"] as const).map(async (state) => {
             const key = `pin-${pin.id}-${state}`
             if (map.hasImage(key)) return
             const canvas = await drawPinImage(pin, state === "active")
             const imgData = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height)
-            map.addImage(key, {
-              width: canvas.width,
-              height: canvas.height,
-              data: new Uint8Array(imgData.data.buffer),
-            })
+            map.addImage(key, { width: canvas.width, height: canvas.height, data: new Uint8Array(imgData.data.buffer) })
           })
         )
 
         Promise.all(registerAll).then(() => {
           if (cancelled) return
-
-          // Animated loading ring for projects
           const size = 60
           let angle = 0
           const animatedImage = {
@@ -258,89 +306,36 @@ export default function FindEvan() {
             data: new Uint8Array(size * size * 4),
             onAdd() {},
             render() {
-              const c = document.createElement("canvas")
-              c.width = size; c.height = size
+              const c = document.createElement("canvas"); c.width = size; c.height = size
               const ctx = c.getContext("2d")!
               const cx = size / 2, cy = size / 2, r = size / 2 - 3
-              ctx.shadowColor = "rgba(0,0,0,0.2)"
-              ctx.shadowBlur = 5
-              ctx.shadowOffsetY = 1
-              ctx.beginPath()
-              ctx.arc(cx, cy, r, 0, Math.PI * 2)
-              ctx.fillStyle = "white"
-              ctx.fill()
+              ctx.shadowColor = "rgba(0,0,0,0.2)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 1
+              ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = "white"; ctx.fill()
               ctx.shadowColor = "transparent"
-              ctx.save()
-              ctx.beginPath()
-              ctx.arc(cx, cy, r - 3, 0, Math.PI * 2)
-              ctx.clip()
-              ctx.fillStyle = "#8e8e93"
-              ctx.fillRect(0, 0, size, size)
-              ctx.fillStyle = "rgba(255,255,255,0.5)"
-              ctx.font = "bold 18px sans-serif"
-              ctx.textAlign = "center"
-              ctx.textBaseline = "middle"
-              ctx.fillText("📁", cx, cy)
+              ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r - 3, 0, Math.PI * 2); ctx.clip()
+              ctx.fillStyle = "#8e8e93"; ctx.fillRect(0, 0, size, size)
+              ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "bold 18px sans-serif"
+              ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("📁", cx, cy)
               ctx.restore()
-              ctx.beginPath()
-              ctx.arc(cx, cy, r - 1, angle, angle + Math.PI * 0.7)
-              ctx.strokeStyle = "#30b94d"
-              ctx.lineWidth = 2
-              ctx.lineCap = "round"
-              ctx.stroke()
+              ctx.beginPath(); ctx.arc(cx, cy, r - 1, angle, angle + Math.PI * 0.7)
+              ctx.strokeStyle = "#30b94d"; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.stroke()
               angle += 0.06
-              const d = ctx.getImageData(0, 0, size, size)
-              this.data = new Uint8Array(d.data.buffer)
-              map.triggerRepaint()
-              return true
+              const d = ctx.getImageData(0, 0, size, size); this.data = new Uint8Array(d.data.buffer)
+              map.triggerRepaint(); return true
             },
           }
           if (!map.hasImage("pin-projects-idle")) map.addImage("pin-projects-idle", animatedImage as unknown as { width: number; height: number; data: Uint8Array }, { pixelRatio: 1 })
           if (!map.hasImage("pin-projects-active")) map.addImage("pin-projects-active", animatedImage as unknown as { width: number; height: number; data: Uint8Array }, { pixelRatio: 1 })
 
-          // GeoJSON source
-          map.addSource("pins", {
-            type: "geojson",
-            data: geojsonData(null),
-          })
+          map.addSource("pins", { type: "geojson", data: geojsonData(null) })
+          map.addLayer({ id: "pins-layer", type: "symbol", source: "pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1 } })
 
-          // Symbol layer
-          map.addLayer({
-            id: "pins-layer",
-            type: "symbol",
-            source: "pins",
-            layout: {
-              "icon-image": ["get", "icon"],
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
-              "icon-anchor": "center",
-              "icon-size": 1,
-            },
-          })
-
-          // Visitor pins source + layer (hidden by default)
-          map.addSource("visitor-pins", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          })
-
-          map.addLayer({
-            id: "visitor-pins-layer",
-            type: "symbol",
-            source: "visitor-pins",
-            layout: {
-              "icon-image": ["get", "icon"],
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
-              "icon-anchor": "center",
-              "icon-size": 1,
-              "visibility": "none",
-            },
-          })
+          map.addSource("visitor-pins", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
+          map.addLayer({ id: "visitor-pins-layer", type: "symbol", source: "visitor-pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1, "visibility": "none" } })
 
           map.on("click", "pins-layer", (e) => {
             const id = e.features?.[0]?.properties?.id as PinId | undefined
-            if (id) handlePinClick(id)
+            if (id) togglePin(id)
           })
           map.on("mouseenter", "pins-layer", () => { map.getCanvas().style.cursor = "pointer" })
           map.on("mouseleave", "pins-layer", () => { map.getCanvas().style.cursor = "" })
@@ -350,102 +345,55 @@ export default function FindEvan() {
         })
       })
     })
-
     return () => {
-      cancelled = true
-      mapRef.current?.remove()
-      mapRef.current = null
+      cancelled = true; mapRef.current?.remove(); mapRef.current = null
     }
-  }, [geojsonData, drawPinImage])
+  }, [geojsonData, drawPinImage, togglePin])
 
-  // Sync visitor pins to map
+  // Sync visitor pins
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
-
     map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && visitorPins.length > 0 ? "visible" : "none")
-
     if (!showVisitorPins) return
-
-    // Clear map source immediately if no pins
     if (visitorPins.length === 0) {
       map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features: [] } as unknown as object)
       return
     }
-
-    // Register each visitor pin image and build GeoJSON
     const registerAndRender = async () => {
       const features: object[] = []
-
       for (const vp of visitorPins) {
         const imgId = `vpin-${vp.id}`
         if (!map.hasImage(imgId)) {
           const vw = 52, vh = 52
-          const c = document.createElement("canvas")
-          c.width = vw + 12; c.height = vh + 10
-          const ctx = c.getContext("2d")!
-          const ox = 4, oy = 2
-
-          // Drop shadow
+          const c = document.createElement("canvas"); c.width = vw + 12; c.height = vh + 10
+          const ctx = c.getContext("2d")!; const ox = 4, oy = 2
           ctx.save()
-          ctx.shadowColor = "rgba(0,0,0,0.22)"
-          ctx.shadowBlur = 5
-          ctx.shadowOffsetX = 1
-          ctx.shadowOffsetY = 3
+          ctx.shadowColor = "rgba(0,0,0,0.22)"; ctx.shadowBlur = 5; ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 3
           const bodyGrad = ctx.createLinearGradient(ox, oy, ox, oy + vh)
-          bodyGrad.addColorStop(0, "#fef08a")
-          bodyGrad.addColorStop(0.5, "#fde047")
-          bodyGrad.addColorStop(1, "#facc15")
-          ctx.fillStyle = bodyGrad
-          ctx.fillRect(ox, oy, vw, vh)
-          ctx.restore()
-
-          // Pixel art
-          const pad = 6
-          const img = new Image()
-          img.src = vp.pixel_art
+          bodyGrad.addColorStop(0, "#fef08a"); bodyGrad.addColorStop(0.5, "#fde047"); bodyGrad.addColorStop(1, "#facc15")
+          ctx.fillStyle = bodyGrad; ctx.fillRect(ox, oy, vw, vh); ctx.restore()
+          const img = new Image(); img.src = vp.pixel_art
           await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res() })
-          ctx.save()
-          ctx.beginPath()
-          ctx.rect(ox + pad, oy + pad, vw - pad * 2, vh - pad * 2)
-          ctx.clip()
-          ctx.imageSmoothingEnabled = false
-          ctx.drawImage(img, ox + pad, oy + pad, vw - pad * 2, vh - pad * 2)
-          ctx.restore()
-
+          ctx.save(); ctx.beginPath(); ctx.rect(ox + 6, oy + 6, vw - 12, vh - 12); ctx.clip()
+          ctx.imageSmoothingEnabled = false; ctx.drawImage(img, ox + 6, oy + 6, vw - 12, vh - 12); ctx.restore()
           const d = ctx.getImageData(0, 0, c.width, c.height)
           map.addImage(imgId, { width: c.width, height: c.height, data: new Uint8Array(d.data.buffer) })
         }
-
-        features.push({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [vp.lng, vp.lat] },
-          properties: { icon: `vpin-${vp.id}` },
-        })
+        features.push({ type: "Feature", geometry: { type: "Point", coordinates: [vp.lng, vp.lat] }, properties: { icon: `vpin-${vp.id}` } })
       }
-
       map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features } as unknown as object)
-    map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && features.length > 0 ? "visible" : "none")
+      map.setLayoutProperty("visitor-pins-layer", "visibility", features.length > 0 ? "visible" : "none")
     }
-
     registerAndRender()
   }, [showVisitorPins, visitorPins, mapReady])
 
-  const handlePinClick = useCallback((id: PinId) => {
-    setActivePin((prev) => {
-      const next = prev === id ? null : id
-      const pin = PINS.find((p) => p.id === id)!
-      if (next) {
-        mapRef.current?.flyTo({ center: [pin.lng, pin.lat], zoom: pin.zoom, duration: 1200, essential: true })
-      }
-      mapRef.current?.getSource("pins")?.setData(geojsonData(next) as unknown as object)
-      return next
-    })
-  }, [geojsonData])
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
 
   return (
     <div className="app">
-      {/* Top bar */}
       <div className="topbar">
         <span className="topbar-icon">📍</span>
         <span className="topbar-title">Find Evan</span>
@@ -453,94 +401,99 @@ export default function FindEvan() {
       </div>
 
       <div className="main">
-        {/* Sidebar */}
         <aside className="sidebar">
-          {expandedPin ? (
-            // ── Expanded detail panel ──
-            <>
-              <div className="sidebar-scroll">
-                <div style={{ padding: "0.75rem 1rem 0" }}>
-                  <button onClick={() => setExpandedPin(null)} style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    fontFamily: "var(--font-mono)", fontSize: "0.7rem",
-                    color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem",
-                    display: "flex", alignItems: "center", gap: 4,
-                  }}>‹ back</button>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
-                    <PinAvatar pin={PINS.find(p => p.id === expandedPin)!} size={52} />
-                    <div>
-                      <div className="hero-name">{PINS.find(p => p.id === expandedPin)!.label}</div>
-                      <div className="hero-sub">{PINS.find(p => p.id === expandedPin)!.sub}</div>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ padding: "0 1rem 1rem" }}>
-                  {expandedPin === "evan" && (
-                    <>
-                      <p style={{ fontSize: "0.8rem", color: "var(--ink-light)", lineHeight: 1.7, marginBottom: "0.75rem" }}>{siteConfig.bio}</p>
-                      <div className="hero-links">
-                        <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link">github ↗</a>
-                        <a href={`mailto:${siteConfig.links.email}`} className="hero-link">email ↗</a>
-                        <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link">linkedin ↗</a>
-                        <a href={siteConfig.links.resume} download className="hero-link">resume ↓</a>
+          {/* ── Expanded detail ── */}
+          <div className="sidebar-panel" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
+            {expandedPinData && (
+              <>
+                <div className="sidebar-scroll">
+                  <div style={{ padding: "0.75rem 1rem 0" }}>
+                    <button onClick={() => togglePin(expandedPin!)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
+                      ‹ back
+                    </button>
+                    {expandedPin === "evan" ? (
+                      /* Full-width photo for Evan */
+                      <div style={{ marginBottom: "0.75rem" }}>
+                        <div style={{
+                          width: "100%", aspectRatio: "1", borderRadius: 8,
+                          overflow: "hidden", background: "#0a84ff",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          marginBottom: "0.6rem",
+                        }}>
+                          <img src="/pins/evan.jpg" alt="Evan Huang"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        </div>
+                        <div className="hero-name" style={{ fontSize: "1.1rem" }}>Evan Huang</div>
+                        <div className="hero-sub">Oakville, ON · Mathematics · UWaterloo</div>
                       </div>
-                    </>
-                  )}
-                  {DETAIL[expandedPin]}
+                    ) : (
+                      /* Small avatar + name for others */
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+                        <PinAvatar pin={expandedPinData} size={48} />
+                        <div>
+                          <div className="hero-name">{expandedPinData.label}</div>
+                          <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {expandedPin === "evan" && <EvanDetail />}
+                  {expandedPin === "uow" && <UoWDetail />}
+                  {expandedPin === "blackberry" && <ExperienceDetail job={siteConfig.experience[0]} />}
+                  {expandedPin === "compugen" && <ExperienceDetail job={siteConfig.experience[1]} />}
+                  {expandedPin === "projects" && <ProjectsDetail />}
+                </div>
+                <Clock />
+                <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
+              </>
+            )}
+          </div>
+
+          {/* ── List view ── */}
+          <div className="sidebar-panel" style={{ transform: expandedPin ? "translateX(100%)" : "translateX(0)", opacity: expandedPin ? 0 : 1, pointerEvents: expandedPin ? "none" : "auto" }}>
+            <div className="sidebar-scroll">
+              {/* Hero */}
+              <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`} onClick={() => togglePin("evan")}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <PinAvatar pin={PINS[0]} size={52} />
+                  <div>
+                    <div className="hero-name">Evan Huang</div>
+                    <div className="hero-sub">Mathematics · UWaterloo<br />Software Dev · Network Infra</div>
+                  </div>
+                </div>
+                <div className="hero-links" style={{ marginTop: "0.75rem" }}>
+                  <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github ↗</a>
+                  <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email ↗</a>
+                  <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin ↗</a>
+                  <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume ↓</a>
                 </div>
               </div>
-              <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
-            </>
-          ) : (
-            // ── List view ──
-            <>
-              <div className="sidebar-scroll">
-                {/* Hero */}
-                <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`}
-                  onClick={() => { handlePinClick("evan"); setExpandedPin("evan") }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <PinAvatar pin={PINS[0]} size={52} />
-                    <div>
-                      <div className="hero-name">Evan Huang</div>
-                      <div className="hero-sub">Mathematics · UWaterloo<br />Software Dev · Network Infra</div>
-                    </div>
-                  </div>
-                  <div className="hero-links" style={{ marginTop: "0.75rem" }}>
-                    <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github ↗</a>
-                    <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email ↗</a>
-                    <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin ↗</a>
-                    <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume ↓</a>
-                  </div>
-                </div>
 
-                <div className="sidebar-divider" />
-                <div className="section-label">Education</div>
-                {PINS.filter((p) => p.id === "uow").map((pin) => (
-                  <PinRow key={pin.id} pin={pin} active={activePin === pin.id}
-                    onClick={() => { handlePinClick(pin.id); setExpandedPin(pin.id) }}
-                    detail={null} />
-                ))}
+              <div className="sidebar-divider" />
+              <div className="section-label">Education</div>
+              {PINS.filter(p => p.id === "uow").map(pin => (
+                <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
+              ))}
 
-                <div className="sidebar-divider" />
-                <div className="section-label">Experience</div>
-                {PINS.filter((p) => p.id === "blackberry" || p.id === "compugen").map((pin) => (
-                  <PinRow key={pin.id} pin={pin} active={activePin === pin.id}
-                    onClick={() => { handlePinClick(pin.id); setExpandedPin(pin.id) }}
-                    detail={null} />
-                ))}
+              <div className="sidebar-divider" />
+              <div className="section-label">Experience</div>
+              {PINS.filter(p => p.id === "blackberry" || p.id === "compugen").map(pin => {
+                const job = siteConfig.experience.find(j => j.company.toLowerCase().includes(pin.id === "blackberry" ? "black" : "comp"))
+                return <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} period={job?.period} />
+              })}
 
-                <div className="sidebar-divider" />
-                <div className="section-label">Projects</div>
-                {PINS.filter((p) => p.id === "projects").map((pin) => (
-                  <PinRow key={pin.id} pin={pin} active={activePin === pin.id}
-                    onClick={() => { handlePinClick(pin.id); setExpandedPin(pin.id) }}
-                    detail={null} />
-                ))}
-              </div>
-              <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
-            </>
-          )}
+              <div className="sidebar-divider" />
+              <div className="section-label">Projects</div>
+              {PINS.filter(p => p.id === "projects").map(pin => (
+                <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
+              ))}
+            </div>
+            <Clock />
+            <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
+          </div>
         </aside>
+
         <div className="map-wrap">
           <div id="mapbox-container" />
           {!mapReady && (
@@ -556,39 +509,18 @@ export default function FindEvan() {
 
 function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   const [err, setErr] = useState(false)
-
   if (pin.notFound) {
     return (
-      <div style={{
-        width: size, height: size, borderRadius: "50%",
-        background: "#8e8e93", border: "2px solid white",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: size * 0.45, flexShrink: 0, position: "relative", overflow: "hidden",
-      }}>
+      <div style={{ width: size, height: size, borderRadius: "50%", background: "#8e8e93", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, flexShrink: 0, position: "relative", overflow: "hidden" }}>
         <span style={{ filter: "brightness(0) invert(0.5)" }}>📁</span>
-        <div style={{
-          position: "absolute", inset: -2, borderRadius: "50%",
-          border: "2.5px solid transparent",
-          borderTopColor: "#30b94d", borderRightColor: "#30b94d",
-          animation: "spin 1s linear infinite",
-        }} />
+        <div style={{ position: "absolute", inset: -2, borderRadius: "50%", border: "2.5px solid transparent", borderTopColor: "#30b94d", borderRightColor: "#30b94d", animation: "spin 1s linear infinite" }} />
       </div>
     )
   }
-
   return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%",
-      border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
-      overflow: "hidden", flexShrink: 0, background: pin.iconBg,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: size * 0.45,
-    }}>
+    <div style={{ width: size, height: size, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", overflow: "hidden", flexShrink: 0, background: pin.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45 }}>
       {!err ? (
-        <img src={`/pins/${pin.id}.jpg`} alt={pin.label}
-          onError={() => setErr(true)}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img src={`/pins/${pin.id}.jpg`} alt={pin.label} onError={() => setErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       ) : (
         <span>{pin.emoji}</span>
       )}
@@ -596,25 +528,24 @@ function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   )
 }
 
-function PinRow({ pin, active, onClick, detail }: { pin: Pin; active: boolean; onClick: () => void; detail: React.ReactNode }) {
+function PinRow({ pin, active, onClick, period }: { pin: Pin; active: boolean; onClick: () => void; period?: string }) {
   return (
-    <>
-      <div className={`pin-card ${active ? "pin-card--active" : ""}`} onClick={onClick}>
-        <PinAvatar pin={pin} size={38} />
-        <div className="pin-card-body">
-          <div className="pin-card-name">{pin.label}</div>
-          <div className="pin-card-sub">
-            {pin.notFound ? (
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
-                Location not found
-              </span>
-            ) : pin.sub}
-          </div>
+    <div className={`pin-card ${active ? "pin-card--active" : ""}`} onClick={onClick}>
+      <PinAvatar pin={pin} size={36} />
+      <div className="pin-card-body">
+        <div className="pin-card-name">{pin.label}</div>
+        <div className="pin-card-sub">
+          {pin.notFound ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
+              Location not found
+            </span>
+          ) : period ? (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.68rem" }}>{period}</span>
+          ) : pin.sub}
         </div>
-        <span className="pin-chevron">›</span>
       </div>
-      {active && detail}
-    </>
+      <span className="pin-chevron">›</span>
+    </div>
   )
 }
