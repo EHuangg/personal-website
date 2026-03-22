@@ -12,6 +12,7 @@ type Pin = {
   label: string
   sub: string
   icon: string
+  emoji: string
   iconBg: string
   lng: number
   lat: number
@@ -20,57 +21,11 @@ type Pin = {
 }
 
 const PINS: Pin[] = [
-  {
-    id: "evan",
-    label: "Evan Huang",
-    sub: "Oakville, ON",
-    icon: "🏠",
-    iconBg: "#0a84ff",
-    lng: -79.6877,
-    lat: 43.4675,
-    zoom: 13,
-  },
-  {
-    id: "uow",
-    label: "University of Waterloo",
-    sub: "Waterloo, ON · B.Sc Mathematics",
-    icon: "🎓",
-    iconBg: "#ff9500",
-    lng: -80.5449,
-    lat: 43.4723,
-    zoom: 15,
-  },
-  {
-    id: "blackberry",
-    label: "BlackBerry",
-    sub: "Waterloo, ON · Network Engineer Intern",
-    icon: "💼",
-    iconBg: "#30b94d",
-    lng: -80.5204,
-    lat: 43.4516,
-    zoom: 15,
-  },
-  {
-    id: "compugen",
-    label: "Compugen Inc.",
-    sub: "Richmond Hill, ON · Network Ops Intern",
-    icon: "💼",
-    iconBg: "#30b94d",
-    lng: -79.4341,
-    lat: 43.8828,
-    zoom: 14,
-  },
-  {
-    id: "projects",
-    label: "Projects",
-    sub: "Location not found",
-    icon: "📁",
-    iconBg: "#bf5af2",
-    lng: -79.3832,
-    lat: 43.6532,
-    zoom: 12,
-    notFound: true,
-  },
+  { id: "evan",       label: "Evan Huang",              sub: "Oakville, ON",                          icon: "🏠", emoji: "👤", iconBg: "#0a84ff", lng: -79.6877, lat: 43.4675, zoom: 13 },
+  { id: "uow",        label: "University of Waterloo",  sub: "Waterloo, ON · B.Sc Mathematics",       icon: "🎓", emoji: "🎓", iconBg: "#ff9500", lng: -80.5449, lat: 43.4723, zoom: 15 },
+  { id: "blackberry", label: "BlackBerry",              sub: "Waterloo, ON · Network Engineer Intern", icon: "💼", emoji: "🫐", iconBg: "#30b94d", lng: -80.5204, lat: 43.4516, zoom: 15 },
+  { id: "compugen",   label: "Compugen Inc.",           sub: "Richmond Hill, ON · Network Ops Intern", icon: "💼", emoji: "🖥",  iconBg: "#30b94d", lng: -79.4341, lat: 43.8828, zoom: 14 },
+  { id: "projects",   label: "Projects",                sub: "Location not found",                    icon: "📁", emoji: "⚡", iconBg: "#bf5af2", lng: -79.3832, lat: 43.6532, zoom: 12, notFound: true },
 ]
 
 const DETAIL: Record<PinId, React.ReactNode> = {
@@ -133,8 +88,6 @@ declare global {
     mapboxgl: {
       accessToken: string
       Map: new (opts: object) => MapboxMap
-      Marker: new (opts?: object) => MapboxMarker
-      Popup: new (opts?: object) => MapboxPopup
       NavigationControl: new (opts?: object) => object
     }
   }
@@ -143,18 +96,13 @@ declare global {
 type MapboxMap = {
   flyTo: (opts: object) => void
   addControl: (control: object, position?: string) => void
+  addSource: (id: string, source: object) => void
+  addLayer: (layer: object) => void
+  addImage: (id: string, data: { width: number; height: number; data: Uint8Array }) => void
+  getSource: (id: string) => { setData: (data: object) => void } | undefined
+  on: (event: string, layerId: string | (() => void), cb?: (e: { features?: { properties?: { id?: string } }[] }) => void) => void
+  getCanvas: () => HTMLCanvasElement
   remove: () => void
-  on: (event: string, cb: () => void) => void
-}
-type MapboxMarker = {
-  setLngLat: (coords: [number, number]) => MapboxMarker
-  setPopup: (popup: MapboxPopup) => MapboxMarker
-  addTo: (map: MapboxMap) => MapboxMarker
-  getElement: () => HTMLElement
-  remove: () => void
-}
-type MapboxPopup = {
-  setHTML: (html: string) => MapboxPopup
 }
 
 function loadMapbox(): Promise<void> {
@@ -175,30 +123,76 @@ function loadMapbox(): Promise<void> {
   })
 }
 
-function makeMarkerEl(pin: Pin, active: boolean): HTMLElement {
-  const el = document.createElement("div")
-  el.style.cssText = `
-    width: 36px; height: 36px; border-radius: 50% 50% 50% 0;
-    transform: rotate(-45deg); background: ${pin.iconBg};
-    border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
-    ${active ? "transform: rotate(-45deg) scale(1.2); box-shadow: 0 4px 16px rgba(0,0,0,0.35);" : ""}
-  `
-  const inner = document.createElement("div")
-  inner.style.cssText = "transform: rotate(45deg); font-size: 16px; line-height: 1;"
-  inner.textContent = pin.icon
-  el.appendChild(inner)
-  return el
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
-  const markersRef = useRef<Map<PinId, MapboxMarker>>(new Map())
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [mapReady, setMapReady] = useState(false)
+
+  // Draw a circular pin image onto a canvas and return ImageData
+  const drawPinImage = useCallback((pin: Pin, active: boolean): HTMLCanvasElement => {
+    const size = active ? 80 : 60
+    const c = document.createElement("canvas")
+    c.width = size; c.height = size
+    const ctx = c.getContext("2d")!
+    const cx = size / 2, cy = size / 2, r = size / 2 - 3
+
+    // Drop shadow
+    ctx.shadowColor = "rgba(0,0,0,0.3)"
+    ctx.shadowBlur = active ? 10 : 6
+    ctx.shadowOffsetY = 2
+
+    // White border circle
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fillStyle = "white"
+    ctx.fill()
+
+    ctx.shadowColor = "transparent"
+
+    // Clip to circle
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx, cy, r - 3, 0, Math.PI * 2)
+    ctx.clip()
+
+    // Fill with bg color
+    ctx.fillStyle = pin.iconBg
+    ctx.fillRect(0, 0, size, size)
+
+    // Draw emoji/letter centered
+    ctx.fillStyle = "white"
+    ctx.font = `bold ${active ? 28 : 20}px sans-serif`
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillText(pin.emoji ?? pin.label[0], cx, cy)
+
+    ctx.restore()
+
+    // Active ring
+    if (active) {
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.strokeStyle = pin.iconBg
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+
+    return c
+  }, [])
+
+  const geojsonData = useCallback((active: PinId | null) => ({
+    type: "FeatureCollection",
+    features: PINS.map((pin) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
+      properties: {
+        id: pin.id,
+        icon: `pin-${pin.id}-${pin.id === active ? "active" : "idle"}`,
+      },
+    })),
+  }), [])
 
   // Init map
   useEffect(() => {
@@ -222,20 +216,47 @@ export default function FindEvan() {
 
       map.on("load", () => {
         if (cancelled) return
-        // Add markers
+
+        // Register all pin images (idle + active) into map sprite
         PINS.forEach((pin) => {
-          const el = makeMarkerEl(pin, false)
-          const popup = new window.mapboxgl.Popup({ offset: 25, closeButton: false })
-            .setHTML(`<strong style="font-size:0.82rem">${pin.label}</strong><br><span style="color:#9a8a72;font-size:0.7rem">${pin.sub}</span>`)
-
-          const marker = new window.mapboxgl.Marker({ element: el })
-            .setLngLat([pin.lng, pin.lat])
-            .setPopup(popup)
-            .addTo(map)
-
-          el.addEventListener("click", () => handlePinClick(pin.id))
-          markersRef.current.set(pin.id, marker)
+          ;(["idle", "active"] as const).forEach((state) => {
+            const canvas = drawPinImage(pin, state === "active")
+            const imgData = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height)
+            map.addImage(`pin-${pin.id}-${state}`, {
+              width: canvas.width,
+              height: canvas.height,
+              data: new Uint8Array(imgData.data.buffer),
+            })
+          })
         })
+
+        // GeoJSON source
+        map.addSource("pins", {
+          type: "geojson",
+          data: geojsonData(null),
+        })
+
+        // Symbol layer — GPU rendered, zero lag
+        map.addLayer({
+          id: "pins-layer",
+          type: "symbol",
+          source: "pins",
+          layout: {
+            "icon-image": ["get", "icon"],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-anchor": "bottom",
+            "icon-size": 1,
+          },
+        })
+
+        // Click
+        map.on("click", "pins-layer", (e) => {
+          const id = e.features?.[0]?.properties?.id as PinId | undefined
+          if (id) handlePinClick(id)
+        })
+        map.on("mouseenter", "pins-layer", () => { map.getCanvas().style.cursor = "pointer" })
+        map.on("mouseleave", "pins-layer", () => { map.getCanvas().style.cursor = "" })
 
         mapRef.current = map
         setMapReady(true)
@@ -247,32 +268,19 @@ export default function FindEvan() {
       mapRef.current?.remove()
       mapRef.current = null
     }
-  }, [])
+  }, [geojsonData, drawPinImage])
 
   const handlePinClick = useCallback((id: PinId) => {
     setActivePin((prev) => {
       const next = prev === id ? null : id
+      const pin = PINS.find((p) => p.id === id)!
       if (next) {
-        const pin = PINS.find((p) => p.id === next)!
         mapRef.current?.flyTo({ center: [pin.lng, pin.lat], zoom: pin.zoom, duration: 1200, essential: true })
-        // Update marker scales
-        markersRef.current.forEach((marker, pid) => {
-          const el = marker.getElement()
-          el.style.transform = pid === next
-            ? "rotate(-45deg) scale(1.25)"
-            : "rotate(-45deg) scale(1)"
-          el.style.boxShadow = pid === next
-            ? "0 4px 16px rgba(0,0,0,0.35)"
-            : "0 2px 8px rgba(0,0,0,0.25)"
-        })
-      } else {
-        markersRef.current.forEach((marker) => {
-          marker.getElement().style.transform = "rotate(-45deg) scale(1)"
-        })
       }
+      mapRef.current?.getSource("pins")?.setData(geojsonData(next) as unknown as object)
       return next
     })
-  }, [])
+  }, [geojsonData])
 
   return (
     <div className="app">
