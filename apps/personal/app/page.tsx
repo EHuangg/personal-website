@@ -118,12 +118,13 @@ export default function Home() {
             <div
               id="map-cutout-placeholder"
               style={{
+                position: "relative",
                 width: "100%",
                 height: 180,
                 marginTop: "1rem",
                 borderRadius: 4,
                 border: "1px solid var(--ink-faint)",
-                background: "var(--bg)",
+                overflow: "hidden",
               }}
             />
           </section>
