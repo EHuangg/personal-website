@@ -229,6 +229,7 @@ export default function FindEvan() {
   const sidebarDragStartRef = useRef<number | null>(null)
   const sidebarDraggingRef = useRef(false)
   const sidebarOffsetRef = useRef(0)
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
   const [sidebarOffsetY, setSidebarOffsetY] = useState(0)
@@ -471,6 +472,38 @@ export default function FindEvan() {
     sidebarOffsetRef.current = 0
   }, [])
 
+  const handleContentTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    // Only start drag if scrolled to top
+    if (sidebarScrollRef.current && sidebarScrollRef.current.scrollTop === 0) {
+      sidebarDraggingRef.current = true
+      sidebarDragStartRef.current = e.touches[0].clientY
+    }
+  }, [])
+
+  const handleContentTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!sidebarDraggingRef.current || sidebarDragStartRef.current === null) return
+    const delta = e.touches[0].clientY - sidebarDragStartRef.current
+    e.preventDefault()
+    // Negative delta = dragging up (expand), positive delta = dragging down (collapse)
+    const offset = Math.max(-300, Math.min(0, delta))
+    setSidebarOffsetY(offset)
+    sidebarOffsetRef.current = offset
+  }, [])
+
+  const handleContentTouchEnd = useCallback(() => {
+    if (!sidebarDraggingRef.current) return
+    sidebarDraggingRef.current = false
+    sidebarDragStartRef.current = null
+    // Snap: if dragged up > 150px, expand fully; otherwise collapse to default
+    if (sidebarOffsetRef.current < -150) {
+      setSidebarOffsetY(-300)
+      sidebarOffsetRef.current = -300
+      return
+    }
+    // Snap back to default (offset = 0)
+    setSidebarOffsetY(0)
+    sidebarOffsetRef.current = 0
+  }, [])
   return (
     <div className="app">
       <div className="topbar">
@@ -482,20 +515,32 @@ export default function FindEvan() {
       <div className="main">
         <aside
           className={`sidebar ${sidebarDraggingRef.current ? "dragging" : ""}`}
-          onTouchStart={handleSidebarTouchStart}
-          onTouchMove={handleSidebarTouchMove}
-          onTouchEnd={handleSidebarTouchEnd}
-          onTouchCancel={handleSidebarTouchEnd}
           style={{
             transform: `translateY(${sidebarOffsetY}px)`,
             "--sidebar-flex": sidebarOffsetY < -150 ? "0 0 85%" : "0 0 46%",
           } as React.CSSProperties}
         >
+          {/* Grabber bar */}
+          <div
+            className="sidebar-grabber"
+            onTouchStart={handleSidebarTouchStart}
+            onTouchMove={handleSidebarTouchMove}
+            onTouchEnd={handleSidebarTouchEnd}
+            onTouchCancel={handleSidebarTouchEnd}
+          />
+
           {/* ── Expanded detail ── */}
           <div className="sidebar-panel sidebar-panel--expanded" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
             {expandedPinData && (
               <>
-                <div className="sidebar-scroll">
+                <div
+                  className="sidebar-scroll"
+                  ref={sidebarScrollRef}
+                  onTouchStart={handleContentTouchStart}
+                  onTouchMove={handleContentTouchMove}
+                  onTouchEnd={handleContentTouchEnd}
+                  onTouchCancel={handleContentTouchEnd}
+                >
                   <div style={{ padding: "0.75rem 1rem 0" }}>
                     <button onClick={() => togglePin(expandedPin!)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
                       ‹ back
@@ -541,7 +586,14 @@ export default function FindEvan() {
 
           {/* ── List view ── */}
           <div className="sidebar-panel sidebar-panel--list" style={{ transform: expandedPin ? "translateX(100%)" : "translateX(0)", opacity: expandedPin ? 0 : 1, pointerEvents: expandedPin ? "none" : "auto" }}>
-            <div className="sidebar-scroll">
+            <div
+              className="sidebar-scroll"
+              ref={sidebarScrollRef}
+              onTouchStart={handleContentTouchStart}
+              onTouchMove={handleContentTouchMove}
+              onTouchEnd={handleContentTouchEnd}
+              onTouchCancel={handleContentTouchEnd}
+            >
               {/* Hero */}
               <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`} onClick={() => togglePin("evan")}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
