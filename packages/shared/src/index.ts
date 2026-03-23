@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "Evan Huang",
-  bio: "Hi I'm Evan, I'm a software developer that likes sports and art",
+  bio: "Hi I'm Evan, I'm a new grad software developer that likes sports and art",
   links: {
     github: "https://github.com/EHuangg",
     email: "evan.hu.huang@gmail.com",

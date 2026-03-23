@@ -134,7 +134,7 @@ type MapboxMap = {
   removeImage: (id: string) => void
   triggerRepaint: () => void
   getSource: (id: string) => { setData: (data: object) => void } | undefined
-  hasLayer: (id: string) => boolean
+  getLayer: (id: string) => object | undefined
   setLayoutProperty: (layer: string, prop: string, value: unknown) => void
   on: (event: string, layerId: string | (() => void), cb?: (e: { features?: { properties?: { id?: string } }[] }) => void) => void
   getCanvas: () => HTMLCanvasElement
@@ -225,6 +225,8 @@ const SIDEBAR_MAP_STYLE = {
   ],
 }
 
+const MAP_STYLE_URL = "mapbox://styles/mapbox/streets-v12"
+
 // ── Clock ──────────────────────────────────────────────────────────────────────
 
 function Clock() {
@@ -233,11 +235,12 @@ function Clock() {
   useEffect(() => {
     const tick = () => {
       const now = new Date()
-      setTime(now.toLocaleTimeString("en-CA", {
-        timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
-      }))
+      const rawTime = now.toLocaleTimeString("en-CA", {
+        timeZone: "America/Toronto", hour: "numeric", minute: "2-digit", hour12: true,
+      })
+      setTime(rawTime.replace(/\./g, "").replace(/\b(am|pm)\b/i, (m) => m.toUpperCase()))
       setDate(now.toLocaleDateString("en-CA", {
-        timeZone: "America/Toronto", weekday: "short", year: "numeric", month: "short", day: "2-digit",
+        timeZone: "America/Toronto", weekday: "short", month: "short", day: "2-digit",
       }))
     }
     tick()
@@ -283,7 +286,11 @@ export default function FindEvan() {
     features: PINS.map((pin) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
-      properties: { id: pin.id, icon: `pin-${pin.id}-${pin.id === active ? "active" : "idle"}` },
+      properties: {
+        id: pin.id,
+        icon: `pin-${pin.id}-${pin.id === active ? "active" : "idle"}`,
+        sortKey: pin.id === active ? 2 : 1,
+      },
     })),
   }), [])
 
@@ -363,7 +370,7 @@ export default function FindEvan() {
       window.mapboxgl.accessToken = token
       const map = new window.mapboxgl.Map({
         container: "mapbox-container",
-        style: SIDEBAR_MAP_STYLE as unknown as object,
+        style: MAP_STYLE_URL,
         center: [PINS[0].lng, PINS[0].lat],
         zoom: PINS[0].zoom,
         attributionControl: false,
@@ -372,6 +379,168 @@ export default function FindEvan() {
 
       map.on("load", () => {
         if (cancelled) return
+
+        const mapAny = map as unknown as {
+          getStyle: () => { layers?: Array<{ id: string; type?: string }> }
+          setPaintProperty: (layerId: string, property: string, value: unknown) => void
+          addLayer: (layer: object) => void
+          getLayer: (id: string) => object | undefined
+          moveLayer: (id: string, beforeId?: string) => void
+        }
+        const pastel = {
+          bg: "#f6f1e8",
+          land: "#efe8da",
+          water: "#cfe7f5",
+          park: "#d7ebcf",
+          building: "#e7dcc9",
+          roadMajor: "#6f5b46",
+          roadMedium: "#8f7a64",
+          roadMinor: "#c2b29e",
+          label: "#2a2016",
+          labelHalo: "#f6f1e8",
+        }
+        const roadLayerPattern = /(road|street|motorway|highway|bridge|tunnel)/i
+        const roadCasingPattern = /(^|[-_])(case|casing|outline)([-_]|$)/i
+        const styleLayers = mapAny.getStyle().layers ?? []
+
+        for (const layer of styleLayers) {
+          const id = layer.id
+          const type = layer.type
+
+          try {
+            if (id === "background" && type === "background") {
+              mapAny.setPaintProperty(id, "background-color", pastel.bg)
+              continue
+            }
+
+            if (type === "fill") {
+              if (/water/i.test(id)) {
+                mapAny.setPaintProperty(id, "fill-color", pastel.water)
+              } else if (/(park|wood|green|grass|landuse|nature)/i.test(id)) {
+                mapAny.setPaintProperty(id, "fill-color", pastel.park)
+              } else if (/building/i.test(id)) {
+                mapAny.setPaintProperty(id, "fill-color", pastel.building)
+              } else if (/(land|earth|terrain)/i.test(id)) {
+                mapAny.setPaintProperty(id, "fill-color", pastel.land)
+              }
+              continue
+            }
+
+            if (type === "line" && roadLayerPattern.test(id)) {
+              mapAny.setPaintProperty(id, "line-opacity", 0)
+              continue
+            }
+
+            if (type === "symbol" && /(road).*(oneway|arrow)|(oneway|arrow).*(road)/i.test(id)) {
+              mapAny.setPaintProperty(id, "icon-opacity", 0)
+              continue
+            }
+
+            if (type === "symbol" && /(label|place|poi|road)/i.test(id)) {
+              mapAny.setPaintProperty(id, "text-color", pastel.label)
+              mapAny.setPaintProperty(id, "text-halo-color", pastel.labelHalo)
+            }
+          } catch {
+            // Ignore layers that don't expose a targeted paint property.
+          }
+        }
+
+        if (!mapAny.getLayer("custom-road-major")) {
+          mapAny.addLayer({
+            id: "custom-road-major",
+            type: "line",
+            source: "composite",
+            "source-layer": "road",
+            minzoom: 7,
+            filter: [
+              "==",
+              ["match", ["get", "class"], ["motorway", "trunk", "primary"], 1, 0],
+              1,
+            ],
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": pastel.roadMajor,
+              "line-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5,
+                1.05,
+                14,
+                1.75,
+              ],
+              "line-opacity": 0.98,
+            },
+          })
+        }
+
+        if (!mapAny.getLayer("custom-road-medium")) {
+          mapAny.addLayer({
+            id: "custom-road-medium",
+            type: "line",
+            source: "composite",
+            "source-layer": "road",
+            minzoom: 8,
+            filter: [
+              "==",
+              ["match", ["get", "class"], ["secondary", "tertiary"], 1, 0],
+              1,
+            ],
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": pastel.roadMedium,
+              "line-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5,
+                0.72,
+                14,
+                1.05,
+              ],
+              "line-opacity": 0.95,
+            },
+          })
+        }
+
+        if (!mapAny.getLayer("custom-road-minor")) {
+          mapAny.addLayer({
+            id: "custom-road-minor",
+            type: "line",
+            source: "composite",
+            "source-layer": "road",
+            minzoom: 10,
+            filter: [
+              "==",
+              ["match", ["get", "class"], ["street", "street_limited", "residential", "living_street", "service", "track", "link"], 1, 0],
+              1,
+            ],
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+            paint: {
+              "line-color": pastel.roadMinor,
+              "line-width": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                5,
+                0.28,
+                14,
+                0.48,
+              ],
+              "line-opacity": 0.92,
+            },
+          })
+        }
+
         const registerAll = PINS.flatMap((pin) =>
           (["idle", "active"] as const).map(async (state) => {
             const key = `pin-${pin.id}-${state}`
@@ -389,10 +558,19 @@ export default function FindEvan() {
         Promise.all(registerAll).then(() => {
           if (cancelled) return
           map.addSource("pins", { type: "geojson", data: geojsonData(null) })
-          map.addLayer({ id: "pins-layer", type: "symbol", source: "pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1 } })
+          map.addLayer({ id: "pins-layer", type: "symbol", source: "pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1, "symbol-sort-key": ["get", "sortKey"] } })
 
           map.addSource("visitor-pins", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
           map.addLayer({ id: "visitor-pins-layer", type: "symbol", source: "visitor-pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1, "visibility": "none" } })
+
+          const labelLayerIds = (mapAny.getStyle().layers ?? [])
+            .filter((layer) => layer.type === "symbol" && /(label|place|road|poi|transit)/i.test(layer.id))
+            .map((layer) => layer.id)
+          for (const id of labelLayerIds) {
+            try { mapAny.moveLayer(id) } catch {}
+          }
+          try { mapAny.moveLayer("pins-layer") } catch {}
+          try { mapAny.moveLayer("visitor-pins-layer") } catch {}
 
           map.on("click", "pins-layer", (e) => {
             const id = e.features?.[0]?.properties?.id as PinId | undefined

@@ -261,7 +261,7 @@ export default function VisitorFooter({
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
           <span style={{ fontSize: "0.72rem", color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>
-            {count === null ? "loading..." : `${count} ${count === 1 ? "person" : "people"} left a mark`}
+            {count === null ? "loading..." : `${count} ${count === 1 ? "sticky" : "stickies"}`}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: "0.68rem", color: "var(--ink-muted)", fontFamily: "var(--font-mono)" }}>show stickies</span>
@@ -301,7 +301,7 @@ export default function VisitorFooter({
             cursor: locating || submitting ? "not-allowed" : "pointer",
             letterSpacing: "0.04em",
           }}>
-            {locating ? "finding your location..." : submitting ? "saving..." : "leave your mark"}
+            {locating ? "finding your location..." : submitting ? "saving..." : "leave a sticky"}
           </button>
         ) : (
           <div style={{ display: "flex", gap: 6 }}>

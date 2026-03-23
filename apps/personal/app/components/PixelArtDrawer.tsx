@@ -190,7 +190,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isMobile ? "0.75rem" : "1rem" }}>
         <div>
-          <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#2a2318" }}>Leave your mark</div>
+          <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#2a2318" }}>Leave a sticky</div>
           <div style={{ fontSize: "0.65rem", color: "#9a8a72", marginTop: 2 }}>draw a 16×16 pixel art pin</div>
         </div>
         <button onClick={onCancel} style={{ background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", color: "#9a8a72" }}>✕</button>
