@@ -320,7 +320,7 @@ export default function FindEvan() {
         }
         ctx.restore()
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.strokeStyle = "#0a84ff"
+        ctx.strokeStyle = active ? "#0a84ff" : "#ffffff"
         ctx.lineWidth = active ? 2.5 : 2
         ctx.stroke()
         resolve(c)
