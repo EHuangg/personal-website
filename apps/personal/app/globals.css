@@ -300,4 +300,22 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     flex-shrink: 0;
     touch-action: none;
   }
+
+  .pixel-drawer-overlay {
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .pixel-drawer-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 88dvh !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-top-left-radius: 18px !important;
+    border-top-right-radius: 18px !important;
+    padding-top: 0.35rem !important;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0)) !important;
+  }
 }

@@ -109,8 +109,8 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
       position: "fixed", inset: 0, zIndex: 1000,
       background: "rgba(0,0,0,0.5)",
       display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
-      <div style={{
+    }} className="pixel-drawer-overlay" onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="pixel-drawer-sheet" style={{
         background: "#f5f0e8",
         borderRadius: 16,
         padding: "1.25rem",
@@ -120,6 +120,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
         boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
         fontFamily: "'IBM Plex Mono', monospace",
       }}>
+        <div className="mobile-detail-grabber" />
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <div>
