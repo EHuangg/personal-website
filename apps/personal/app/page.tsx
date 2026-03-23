@@ -6,7 +6,7 @@ import { siteConfig } from "@personal-website/shared"
 
 const VisitorFooter = dynamic(() => import("./components/VisitorFooter"), { ssr: false })
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+////// Types //////////////////////////////////
 
 type PinId = "evan" | "uow" | "blackberry" | "compugen" | "projects"
 
@@ -31,7 +31,7 @@ const PINS: Pin[] = [
   { id: "projects",   label: "Projects",               sub: "Location not found",                     icon: "📁", emoji: "⚡", iconBg: "#b8b1a4", lng: -150.0,             lat: 20.0,              zoom: 4, notFound: true },
 ]
 
-// ── Courses ───────────────────────────────────────────────────────────────────
+////// Courses //////////////////////////////////
 
 type Course = { code: string; name: string; url: string; tags: string[] }
 
@@ -44,7 +44,7 @@ const COURSES: Course[] = [
   { code: "STAT 341", name: "Computational Statistics and Data Analysis",       url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-STAT.html#STAT341", tags: ["R"] },
 ]
 
-// ── Detail content ─────────────────────────────────────────────────────────────
+////// Detail content //////////////////////////////////
 
 function UoWDetail() {
   return (
@@ -111,7 +111,7 @@ function EvanDetail() {
   )
 }
 
-// ── Map helpers ────────────────────────────────────────────────────────────────
+////// Map helpers //////////////////////////////////
 
 declare global {
   interface Window {
@@ -227,7 +227,7 @@ const SIDEBAR_MAP_STYLE = {
 
 const MAP_STYLE_URL = "mapbox://styles/mapbox/streets-v12"
 
-// ── Clock ──────────────────────────────────────────────────────────────────────
+////// Clock //////////////////////////////////
 
 function Clock() {
   const [time, setTime] = useState("")
@@ -265,7 +265,7 @@ function Clock() {
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+////// Main component //////////////////////////////////
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
@@ -642,7 +642,7 @@ export default function FindEvan() {
     registerAndRender()
   }, [showVisitorPins, visitorPins, mapReady])
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  ////// Render //////////////////////////////////
 
   const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
 
@@ -696,7 +696,7 @@ export default function FindEvan() {
     <div className="app">
       <div className="topbar">
         <img src="/favicon.png" alt="icon" style={{ width: 24, height: 24, imageRendering: "pixelated" }} />
-        <span className="topbar-title">Find Evan</span>
+        <span className="topbar-title">Evan Maps</span>
         <span className="topbar-subtitle">evan-huang.dev</span>
       </div>
 
