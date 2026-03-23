@@ -20,14 +20,14 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
 }
 
-// Round to 2 decimal places — ~1.1km precision, fuzzy for privacy
+// Round to 3 decimal places — ~110m precision, fuzzy for privacy
 function fuzzyCoord(n: number) {
-  return Math.round(n * 100) / 100
+  return Math.round(n * 1000) / 1000
 }
 
-// Add random displacement ±0.1 degrees (~11km at equator)
+// Add random displacement ±0.015 degrees (~1.7km at equator)
 function addRandomDisplacement(coord: number) {
-  const displacement = (Math.random() - 0.5) * 0.2
+  const displacement = (Math.random() - 0.5) * 0.03
   return fuzzyCoord(coord + displacement)
 }
 

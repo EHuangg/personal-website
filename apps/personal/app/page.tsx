@@ -376,6 +376,9 @@ export default function FindEvan() {
     const map = mapRef.current
     if (!map || !mapReady) return
     try {
+      map.setLayoutProperty("pins-layer", "visibility", showVisitorPins ? "none" : "visible")
+    } catch { return }
+    try {
       map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && visitorPins.length > 0 ? "visible" : "none")
     } catch { return } // layer not yet re-added after style switch
     if (!showVisitorPins) return
