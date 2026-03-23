@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState, useCallback, useEffect } from "react"
+import { createPortal } from "react-dom"
 
 const SIZE = 16
 const BASE_CELL = 20
@@ -292,7 +293,8 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
   )
 
   if (isMobile) {
-    return (
+    if (typeof document === "undefined") return null
+    return createPortal((
       <>
         <div className="mobile-detail-backdrop" onClick={onCancel} style={{ zIndex: 1000 }} />
         <div
@@ -309,10 +311,11 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
           </div>
         </div>
       </>
-    )
+    ), document.body)
   }
 
-  return (
+  if (typeof document === "undefined") return null
+  return createPortal((
     <div style={{
       position: "fixed", inset: 0, zIndex: 1000,
       background: "rgba(0,0,0,0.5)",
@@ -331,5 +334,5 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
         {content}
       </div>
     </div>
-  )
+  ), document.body)
 }
