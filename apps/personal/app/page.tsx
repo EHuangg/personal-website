@@ -226,20 +226,15 @@ function Clock() {
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
-  const sheetStartYRef = useRef<number | null>(null)
+  const sheetStartRef = useRef<{ x: number; y: number } | null>(null)
+  const sheetPositionRef = useRef({ x: 0, y: 0 })
   const sheetDraggingRef = useRef(false)
-  const sheetOffsetRef = useRef(0)
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
-  const [sheetOffsetY, setSheetOffsetY] = useState(0)
+  const [sheetPos, setSheetPos] = useState({ x: 0, y: 0 })
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
-
-  const setSheetOffset = useCallback((value: number) => {
-    sheetOffsetRef.current = value
-    setSheetOffsetY(value)
-  }, [])
 
   const geojsonData = useCallback((active: PinId | null) => ({
     type: "FeatureCollection",
@@ -440,37 +435,39 @@ export default function FindEvan() {
   const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
 
   useEffect(() => {
-    setSheetOffset(0)
-    sheetStartYRef.current = null
+    setSheetPos({ x: 0, y: 0 })
+    sheetPositionRef.current = { x: 0, y: 0 }
+    sheetStartRef.current = null
     sheetDraggingRef.current = false
-  }, [expandedPin, setSheetOffset])
+  }, [expandedPin])
 
   const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     sheetDraggingRef.current = true
-    sheetStartYRef.current = e.touches[0].clientY
+    sheetStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
   }, [])
 
   const handleSheetTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sheetDraggingRef.current || sheetStartYRef.current === null) return
-    const delta = e.touches[0].clientY - sheetStartYRef.current
-    if (delta <= 0) {
-      setSheetOffset(0)
-      return
-    }
+    if (!sheetDraggingRef.current || !sheetStartRef.current) return
     e.preventDefault()
-    setSheetOffset(Math.min(360, delta))
-  }, [setSheetOffset])
+    const deltaX = e.touches[0].clientX - sheetStartRef.current.x
+    const deltaY = e.touches[0].clientY - sheetStartRef.current.y
+    sheetPositionRef.current = { x: deltaX, y: deltaY }
+    setSheetPos({ x: deltaX, y: deltaY })
+  }, [])
 
   const handleSheetTouchEnd = useCallback(() => {
     if (!sheetDraggingRef.current) return
     sheetDraggingRef.current = false
-    sheetStartYRef.current = null
-    if (sheetOffsetRef.current > 120 && expandedPin) {
+    // Dismiss if dragged down > 120px
+    if (sheetPositionRef.current.y > 120 && expandedPin) {
       togglePin(expandedPin)
       return
     }
-    setSheetOffset(0)
-  }, [expandedPin, togglePin, setSheetOffset])
+    // Otherwise, snap back to origin
+    setSheetPos({ x: 0, y: 0 })
+    sheetPositionRef.current = { x: 0, y: 0 }
+    sheetStartRef.current = null
+  }, [expandedPin, togglePin])
 
   return (
     <div className="app">
@@ -595,17 +592,20 @@ export default function FindEvan() {
         <>
           <div className="mobile-detail-backdrop" onClick={() => togglePin(expandedPinData.id)} />
           <div
-            className="mobile-detail-sheet"
+            className={`mobile-detail-sheet ${sheetDraggingRef.current ? "dragging" : ""}`}
             style={{
-              transform: `translateY(${sheetOffsetY}px)`,
-              transition: sheetDraggingRef.current ? "none" : "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)",
-            }}
+              "--sheet-x": `${sheetPos.x}px`,
+              "--sheet-y": `${sheetPos.y}px`,
+            } as React.CSSProperties}
             onTouchStart={handleSheetTouchStart}
             onTouchMove={handleSheetTouchMove}
             onTouchEnd={handleSheetTouchEnd}
             onTouchCancel={handleSheetTouchEnd}
           >
-            <div className="mobile-detail-grabber" />
+            <div
+              className="mobile-detail-grabber"
+              style={{ cursor: "grab", touchAction: "none" }}
+            />
             <div className="sidebar-scroll" style={{ paddingBottom: "1rem" }}>
               <div style={{ padding: "0.75rem 1rem 0" }}>
                 <button onClick={() => togglePin(expandedPinData.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
