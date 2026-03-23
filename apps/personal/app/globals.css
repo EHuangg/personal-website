@@ -310,7 +310,9 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
   .pixel-drawer-sheet {
     width: 100% !important;
     max-width: none !important;
+    height: 82dvh !important;
     max-height: 88dvh !important;
+    min-height: 74dvh !important;
     border-bottom-left-radius: 0 !important;
     border-bottom-right-radius: 0 !important;
     border-top-left-radius: 18px !important;
