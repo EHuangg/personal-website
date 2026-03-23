@@ -5,6 +5,7 @@ import PixelArtDrawer from "./PixelArtDrawer"
 
 const COOKIE = "visitor_pin_id"
 const DEVICE_COOKIE = "visitor_device_id"
+const LAST_COORDS_KEY = "visitor_last_coords"
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null
@@ -39,6 +40,24 @@ function getOrCreateDeviceId(): string {
   try { localStorage.setItem(DEVICE_COOKIE, id) } catch {}
   setCookie(DEVICE_COOKIE, id)
   return id
+}
+
+function saveLastCoords(coords: { lat: number; lng: number }) {
+  try {
+    localStorage.setItem(LAST_COORDS_KEY, JSON.stringify(coords))
+  } catch {}
+}
+
+function getLastCoords(): { lat: number; lng: number } | null {
+  try {
+    const raw = localStorage.getItem(LAST_COORDS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (typeof parsed?.lat === "number" && typeof parsed?.lng === "number") {
+      return { lat: parsed.lat, lng: parsed.lng }
+    }
+  } catch {}
+  return null
 }
 
 // Max precision (no rounding)
@@ -132,15 +151,27 @@ export default function VisitorFooter({
       (pos) => {
         setLocating(false)
         const displaced = addRandomDisplacement(pos.coords.latitude, pos.coords.longitude)
-        setPendingCoords({
+        const coords = {
           lat: displaced.lat,
           lng: displaced.lng,
-        })
+        }
+        setPendingCoords(coords)
+        saveLastCoords(coords)
         setShowDrawer(true)
       },
       (err) => {
         setLocating(false)
-        if (err.code === 1) setError("Location permission denied.")
+        if (err.code === 1) {
+          const last = getLastCoords()
+          if (last) {
+            setPendingCoords(last)
+            setShowDrawer(true)
+            setError("Location permission denied. Using your last saved location on this device.")
+            return
+          }
+          setError("Location permission denied. Enable location access for this site and try again.")
+          return
+        }
         else setError("Couldn't get your location.")
       },
       { enableHighAccuracy: false, timeout: 8000 }
