@@ -449,13 +449,9 @@ export default function FindEvan() {
   const handleSidebarTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (!sidebarDraggingRef.current || sidebarDragStartRef.current === null) return
     const delta = e.touches[0].clientY - sidebarDragStartRef.current
-    if (delta <= 0) {
-      setSidebarOffsetY(0)
-      sidebarOffsetRef.current = 0
-      return
-    }
     e.preventDefault()
-    const offset = Math.min(400, delta)
+    // Negative delta = dragging up (expand), positive delta = dragging down (collapse)
+    const offset = Math.max(-300, Math.min(0, delta))
     setSidebarOffsetY(offset)
     sidebarOffsetRef.current = offset
   }, [])
@@ -464,13 +460,13 @@ export default function FindEvan() {
     if (!sidebarDraggingRef.current) return
     sidebarDraggingRef.current = false
     sidebarDragStartRef.current = null
-    if (sidebarOffsetRef.current > 100) {
-      // Dismiss sidebar by dragging down far enough
-      setSidebarOffsetY(400)
-      sidebarOffsetRef.current = 400
+    // Snap: if dragged up > 150px, expand fully; otherwise collapse to default
+    if (sidebarOffsetRef.current < -150) {
+      setSidebarOffsetY(-300)
+      sidebarOffsetRef.current = -300
       return
     }
-    // Otherwise snap back to top
+    // Snap back to default (offset = 0)
     setSidebarOffsetY(0)
     sidebarOffsetRef.current = 0
   }, [])
@@ -485,15 +481,15 @@ export default function FindEvan() {
 
       <div className="main">
         <aside
-          className="sidebar"
+          className={`sidebar ${sidebarDraggingRef.current ? "dragging" : ""}`}
           onTouchStart={handleSidebarTouchStart}
           onTouchMove={handleSidebarTouchMove}
           onTouchEnd={handleSidebarTouchEnd}
           onTouchCancel={handleSidebarTouchEnd}
           style={{
             transform: `translateY(${sidebarOffsetY}px)`,
-            transition: sidebarDraggingRef.current ? "none" : "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)",
-          }}
+            "--sidebar-flex": sidebarOffsetY < -150 ? "0 0 85%" : "0 0 46%",
+          } as React.CSSProperties}
         >
           {/* ── Expanded detail ── */}
           <div className="sidebar-panel sidebar-panel--expanded" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>

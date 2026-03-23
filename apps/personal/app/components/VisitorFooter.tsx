@@ -20,9 +20,15 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
 }
 
-// Round to 3 decimal places — ~100m precision, no sensitive data
+// Round to 2 decimal places — ~1.1km precision, fuzzy for privacy
 function fuzzyCoord(n: number) {
-  return Math.round(n * 1000) / 1000
+  return Math.round(n * 100) / 100
+}
+
+// Add random displacement ±0.1 degrees (~11km at equator)
+function addRandomDisplacement(coord: number) {
+  const displacement = (Math.random() - 0.5) * 0.2
+  return fuzzyCoord(coord + displacement)
 }
 
 type VisitorPin = { id: string; lat: number; lng: number; pixel_art: string }
@@ -93,8 +99,8 @@ export default function VisitorFooter({
       (pos) => {
         setLocating(false)
         setPendingCoords({
-          lat: fuzzyCoord(pos.coords.latitude),
-          lng: fuzzyCoord(pos.coords.longitude),
+          lat: addRandomDisplacement(pos.coords.latitude),
+          lng: addRandomDisplacement(pos.coords.longitude),
         })
         setShowDrawer(true)
       },
