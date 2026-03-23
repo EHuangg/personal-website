@@ -152,8 +152,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
     sheetStartYRef.current = e.touches[0].clientY
     const target = e.target as HTMLElement
     const fromGrabber = !!target.closest(".mobile-detail-grabber")
-    const atTop = (sheetScrollRef.current?.scrollTop ?? 0) <= 0
-    sheetCanDragRef.current = fromGrabber || atTop
+    sheetCanDragRef.current = fromGrabber
     sheetDraggingRef.current = sheetCanDragRef.current
   }, [])
 
@@ -206,6 +205,10 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
           style={{
             borderRadius: 6,
             border: "1px solid #c8b89a",
+            backgroundColor: "#e8e0d4",
+            backgroundImage: "linear-gradient(45deg, #e8e0d4 25%, transparent 25%, transparent 75%, #e8e0d4 75%), linear-gradient(45deg, #e8e0d4 25%, transparent 25%, transparent 75%, #e8e0d4 75%)",
+            backgroundPosition: "0 0, 10px 10px",
+            backgroundSize: "20px 20px",
             cursor: erasing ? "cell" : "crosshair",
             imageRendering: "pixelated",
             touchAction: "none",
