@@ -54,15 +54,17 @@ function UoWDetail() {
       <p className="pin-detail-bio" style={{ marginBottom: "0.75rem" }}>Relevant coursework:</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         {COURSES.map((c) => (
-          <div key={c.code} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "5px 0", borderBottom: "0.5px solid var(--ink-faint)", flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)", flexShrink: 0, minWidth: 60 }}>{c.code}</span>
-            <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.76rem", color: "var(--blue)", textDecoration: "none", flex: 1, minWidth: 0 }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "underline" }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.textDecoration = "none" }}>
-              {c.name}
-            </a>
-            <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-              {c.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
+          <div key={c.code} style={{ display: "flex", alignItems: "center", gap: "0.65rem", padding: "6px 0", borderBottom: "0.5px solid var(--ink-faint)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)", flexShrink: 0, minWidth: 60, textAlign: "center", alignSelf: "center" }}>{c.code}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", flex: 1, minWidth: 0 }}>
+              <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.76rem", color: "var(--blue)", textDecoration: "none", alignSelf: "flex-start", background: "rgba(10,132,255,0.09)", padding: "2px 8px", borderRadius: "6px", transition: "background 0.15s" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(10,132,255,0.18)" }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(10,132,255,0.09)" }}>
+                {c.name}
+              </a>
+              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                {c.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
+              </div>
             </div>
           </div>
         ))}
@@ -88,10 +90,9 @@ function ExperienceDetail({ job }: { job: typeof siteConfig.experience[0] }) {
 function ProjectsDetail() {
   return (
     <div className="pin-detail">
-      <p className="pin-detail-bio" style={{ marginBottom: "0.75rem", fontStyle: "italic" }}>Location not found — searching…</p>
       {siteConfig.projects.map((p) => (
         <div key={p.name} style={{ marginBottom: "0.9rem" }}>
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="pin-detail-link">{p.name} ↗</a>
+          <a href={p.url} target="_blank" rel="noopener noreferrer" className="pin-detail-link">{p.name}</a>
           <p className="pin-detail-bio" style={{ marginTop: "0.2rem" }}>{p.description}</p>
           <div className="pin-detail-tags" style={{ marginTop: "0.3rem" }}>
             {p.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
@@ -166,6 +167,19 @@ const SIDEBAR_MAP_STYLE = {
       type: "vector",
       url: "mapbox://mapbox.mapbox-streets-v8",
     },
+    "toronto-label": {
+      type: "geojson",
+      data: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [-79.3832, 43.6532] },
+            properties: { name: "Toronto" },
+          },
+        ],
+      },
+    },
   },
   layers: [
     { id: "background", type: "background", paint: { "background-color": "#f5f0e8" } },
@@ -181,7 +195,7 @@ const SIDEBAR_MAP_STYLE = {
       source: "mapbox-streets",
       "source-layer": "road",
       layout: {
-        "text-field": ["get", "name"],
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
         "text-font": ["DIN Pro Regular", "Arial Unicode MS Regular"],
         "text-size": 10,
         "symbol-placement": "line",
@@ -192,6 +206,22 @@ const SIDEBAR_MAP_STYLE = {
         "text-halo-width": 1,
       },
     },
+    {
+      id: "toronto-label",
+      type: "symbol",
+      source: "toronto-label",
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 4, 12, 10, 18],
+        "text-letter-spacing": 0.02,
+      },
+      paint: {
+        "text-color": "#4f8d64",
+        "text-halo-color": "#f5f0e8",
+        "text-halo-width": 1.5,
+      },
+    },
   ],
 }
 
@@ -199,10 +229,17 @@ const SIDEBAR_MAP_STYLE = {
 
 function Clock() {
   const [time, setTime] = useState("")
+  const [date, setDate] = useState("")
   useEffect(() => {
-    const tick = () => setTime(new Date().toLocaleTimeString("en-CA", {
-      timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
-    }))
+    const tick = () => {
+      const now = new Date()
+      setTime(now.toLocaleTimeString("en-CA", {
+        timeZone: "America/Toronto", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      }))
+      setDate(now.toLocaleDateString("en-CA", {
+        timeZone: "America/Toronto", weekday: "short", year: "numeric", month: "short", day: "2-digit",
+      }))
+    }
     tick()
     const t = setInterval(tick, 1000)
     return () => clearInterval(t)
@@ -216,8 +253,11 @@ function Clock() {
       fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)",
       flexShrink: 0,
     }}>
-      <span>EST / Toronto</span>
-      <span style={{ color: "var(--ink)", letterSpacing: "0.06em" }}>{time}</span>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#30b94d", boxShadow: "0 0 0 2px rgba(48,185,77,0.2)" }} />
+        <span>EST / Toronto</span>
+      </span>
+      <span style={{ color: "var(--ink)", letterSpacing: "0.03em" }}>{date} {time}</span>
     </div>
   )
 }
@@ -279,10 +319,10 @@ export default function FindEvan() {
           ctx.fillText(pin.emoji, cx, cy)
         }
         ctx.restore()
-        if (active && !pin.notFound) {
-          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
-          ctx.strokeStyle = pin.iconBg; ctx.lineWidth = 2.5; ctx.stroke()
-        }
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
+        ctx.strokeStyle = "#0a84ff"
+        ctx.lineWidth = active ? 2.5 : 2
+        ctx.stroke()
         resolve(c)
       }
       if (!pin.notFound || pin.id === "projects") {
@@ -536,16 +576,16 @@ export default function FindEvan() {
                   </div>
                 </div>
                 <div className="hero-links" style={{ marginTop: "0.75rem" }}>
-                  <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github ↗</a>
-                  <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email ↗</a>
-                  <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin ↗</a>
-                  <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume ↓</a>
+                  <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github</a>
+                  <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email</a>
+                  <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin</a>
+                  <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume</a>
                 </div>
               </div>
 
               <div className="sidebar-divider" />
               <div style={{ padding: "0.5rem 1rem", display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {["Python", "TypeScript", "Next.js", "PostgreSQL", "AWS", "Linux"].map((t) => (
+                {["Python", "TypeScript", "React", "Node.js", "Next.js", "PostgreSQL", "Supabase", "AWS", "Docker", "Linux"].map((t) => (
                   <span key={t} className="pin-detail-tag">{t}</span>
                 ))}
               </div>

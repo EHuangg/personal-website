@@ -163,8 +163,10 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
 .pin-detail-link {
   color: var(--blue); text-decoration: none; font-size: 0.75rem;
   display: inline-flex; align-items: center; gap: 3px; margin-top: 0.4rem;
+  background: rgba(10,132,255,0.09); padding: 2px 8px; border-radius: 6px;
+  transition: background 0.15s;
 }
-.pin-detail-link:hover { text-decoration: underline; }
+.pin-detail-link:hover { background: rgba(10,132,255,0.18); }
 .pin-not-found {
   display: flex; align-items: center; gap: 6px;
   font-size: 0.72rem; color: var(--ink-muted); font-family: var(--font-mono);

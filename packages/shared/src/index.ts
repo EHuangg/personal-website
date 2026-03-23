@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "Evan Huang",
-  bio: "Mathematics graduate from the University of Waterloo with experience in software development and network infrastructure. Outside of work, I enjoy basketball, soccer, and recently started exploring pixel art.",
+  bio: "Hi I'm Evan, I'm a software developer that likes sports and art",
   links: {
     github: "https://github.com/EHuangg",
     email: "evan.hu.huang@gmail.com",
