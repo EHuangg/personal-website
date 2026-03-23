@@ -226,13 +226,8 @@ function Clock() {
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
-  const sidebarDragStartRef = useRef<number | null>(null)
-  const sidebarDraggingRef = useRef(false)
-  const sidebarOffsetRef = useRef(0)
-  const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
-  const [sidebarOffsetY, setSidebarOffsetY] = useState(0)
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
@@ -434,76 +429,6 @@ export default function FindEvan() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
-
-  useEffect(() => {
-    setSidebarOffsetY(0)
-    sidebarDragStartRef.current = null
-    sidebarDraggingRef.current = false
-    sidebarOffsetRef.current = 0
-  }, [])
-
-  const handleSidebarTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    sidebarDraggingRef.current = true
-    sidebarDragStartRef.current = e.touches[0].clientY
-  }, [])
-
-  const handleSidebarTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sidebarDraggingRef.current || sidebarDragStartRef.current === null) return
-    const delta = e.touches[0].clientY - sidebarDragStartRef.current
-    e.preventDefault()
-    // Negative delta = dragging up (expand), positive delta = dragging down (collapse)
-    const offset = Math.max(-300, Math.min(0, delta))
-    setSidebarOffsetY(offset)
-    sidebarOffsetRef.current = offset
-  }, [])
-
-  const handleSidebarTouchEnd = useCallback(() => {
-    if (!sidebarDraggingRef.current) return
-    sidebarDraggingRef.current = false
-    sidebarDragStartRef.current = null
-    // Snap: if dragged up > 150px, expand fully; otherwise collapse to default
-    if (sidebarOffsetRef.current < -150) {
-      setSidebarOffsetY(-300)
-      sidebarOffsetRef.current = -300
-      return
-    }
-    // Snap back to default (offset = 0)
-    setSidebarOffsetY(0)
-    sidebarOffsetRef.current = 0
-  }, [])
-
-  const handleContentTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    // Only start drag if scrolled to top
-    if (sidebarScrollRef.current && sidebarScrollRef.current.scrollTop === 0) {
-      sidebarDraggingRef.current = true
-      sidebarDragStartRef.current = e.touches[0].clientY
-    }
-  }, [])
-
-  const handleContentTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sidebarDraggingRef.current || sidebarDragStartRef.current === null) return
-    const delta = e.touches[0].clientY - sidebarDragStartRef.current
-    e.preventDefault()
-    // Negative delta = dragging up (expand), positive delta = dragging down (collapse)
-    const offset = Math.max(-300, Math.min(0, delta))
-    setSidebarOffsetY(offset)
-    sidebarOffsetRef.current = offset
-  }, [])
-
-  const handleContentTouchEnd = useCallback(() => {
-    if (!sidebarDraggingRef.current) return
-    sidebarDraggingRef.current = false
-    sidebarDragStartRef.current = null
-    // Snap: if dragged up > 150px, expand fully; otherwise collapse to default
-    if (sidebarOffsetRef.current < -150) {
-      setSidebarOffsetY(-300)
-      sidebarOffsetRef.current = -300
-      return
-    }
-    // Snap back to default (offset = 0)
-    setSidebarOffsetY(0)
-    sidebarOffsetRef.current = 0
-  }, [])
   return (
     <div className="app">
       <div className="topbar">
@@ -513,34 +438,13 @@ export default function FindEvan() {
       </div>
 
       <div className="main">
-        <aside
-          className={`sidebar ${sidebarDraggingRef.current ? "dragging" : ""}`}
-          style={{
-            transform: `translateY(${sidebarOffsetY}px)`,
-            "--sidebar-flex": sidebarOffsetY < -150 ? "0 0 85%" : "0 0 46%",
-          } as React.CSSProperties}
-        >
-          {/* Grabber bar */}
-          <div
-            className="sidebar-grabber"
-            onTouchStart={handleSidebarTouchStart}
-            onTouchMove={handleSidebarTouchMove}
-            onTouchEnd={handleSidebarTouchEnd}
-            onTouchCancel={handleSidebarTouchEnd}
-          />
+        <aside className="sidebar">
 
           {/* ── Expanded detail ── */}
           <div className="sidebar-panel sidebar-panel--expanded" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
             {expandedPinData && (
               <>
-                <div
-                  className="sidebar-scroll"
-                  ref={sidebarScrollRef}
-                  onTouchStart={handleContentTouchStart}
-                  onTouchMove={handleContentTouchMove}
-                  onTouchEnd={handleContentTouchEnd}
-                  onTouchCancel={handleContentTouchEnd}
-                >
+                <div className="sidebar-scroll">
                   <div style={{ padding: "0.75rem 1rem 0" }}>
                     <button onClick={() => togglePin(expandedPin!)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
                       ‹ back
@@ -586,14 +490,7 @@ export default function FindEvan() {
 
           {/* ── List view ── */}
           <div className="sidebar-panel sidebar-panel--list" style={{ transform: expandedPin ? "translateX(100%)" : "translateX(0)", opacity: expandedPin ? 0 : 1, pointerEvents: expandedPin ? "none" : "auto" }}>
-            <div
-              className="sidebar-scroll"
-              ref={sidebarScrollRef}
-              onTouchStart={handleContentTouchStart}
-              onTouchMove={handleContentTouchMove}
-              onTouchEnd={handleContentTouchEnd}
-              onTouchCancel={handleContentTouchEnd}
-            >
+            <div className="sidebar-scroll">
               {/* Hero */}
               <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`} onClick={() => togglePin("evan")}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -651,6 +548,51 @@ export default function FindEvan() {
           )}
         </div>
       </div>
+
+      {expandedPinData && (
+        <>
+          <div className="mobile-detail-backdrop" onClick={() => togglePin(expandedPinData.id)} />
+          <div className="mobile-detail-sheet">
+            <div className="mobile-detail-grabber" />
+            <div className="sidebar-scroll" style={{ paddingBottom: "1rem" }}>
+              <div style={{ padding: "0.75rem 1rem 0" }}>
+                <button onClick={() => togglePin(expandedPinData.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
+                  ‹ back
+                </button>
+                {expandedPinData.id === "evan" ? (
+                  <div style={{ marginBottom: "0.75rem" }}>
+                    <div style={{
+                      width: "100%", aspectRatio: "1", borderRadius: 8,
+                      overflow: "hidden", background: "#0a84ff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      marginBottom: "0.6rem",
+                    }}>
+                      <img src="/pins/evan.jpg" alt="Evan Huang"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    </div>
+                    <div className="hero-name" style={{ fontSize: "1.1rem" }}>Evan Huang</div>
+                    <div className="hero-sub">Oakville, ON · Mathematics · UWaterloo</div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+                    <PinAvatar pin={expandedPinData} size={48} />
+                    <div>
+                      <div className="hero-name">{expandedPinData.label}</div>
+                      <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {expandedPinData.id === "evan" && <EvanDetail />}
+              {expandedPinData.id === "uow" && <UoWDetail />}
+              {expandedPinData.id === "blackberry" && <ExperienceDetail job={siteConfig.experience[0]} />}
+              {expandedPinData.id === "compugen" && <ExperienceDetail job={siteConfig.experience[1]} />}
+              {expandedPinData.id === "projects" && <ProjectsDetail />}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
