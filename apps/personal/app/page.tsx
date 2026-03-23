@@ -169,8 +169,8 @@ const SIDEBAR_MAP_STYLE = {
   },
   layers: [
     { id: "background", type: "background", paint: { "background-color": "#f5f0e8" } },
-    { id: "water", type: "fill", source: "mapbox-streets", "source-layer": "water", paint: { "fill-color": "#ddd2bf" } },
-    { id: "parks", type: "fill", source: "mapbox-streets", "source-layer": "landuse", filter: ["==", "class", "park"], paint: { "fill-color": "#ebe2d4" } },
+    { id: "water", type: "fill", source: "mapbox-streets", "source-layer": "water", paint: { "fill-color": "#add7f0" } },
+    { id: "parks", type: "fill", source: "mapbox-streets", "source-layer": "landuse", filter: ["==", "class", "park"], paint: { "fill-color": "#a8d5ba" } },
     { id: "roads-minor", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "street", "street_limited", "service"], paint: { "line-color": "#c8b89a", "line-width": 0.7 } },
     { id: "roads-major", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "primary", "secondary", "tertiary"], paint: { "line-color": "#b39f82", "line-width": 1.3 } },
     { id: "roads-highway", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "motorway", "trunk"], paint: { "line-color": "#927f66", "line-width": 2.2 } },

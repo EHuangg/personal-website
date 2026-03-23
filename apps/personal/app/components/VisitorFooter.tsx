@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import PixelArtDrawer from "./PixelArtDrawer"
 
 const COOKIE = "visitor_pin_id"
+const DEVICE_COOKIE = "visitor_device_id"
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null
@@ -20,15 +21,46 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
 }
 
-// Round to 3 decimal places — ~110m precision, fuzzy for privacy
-function fuzzyCoord(n: number) {
-  return Math.round(n * 1000) / 1000
+function getOrCreateDeviceId(): string {
+  const fromCookie = getCookie(DEVICE_COOKIE)
+  if (fromCookie) return fromCookie
+
+  let id = ""
+  try {
+    id = localStorage.getItem(DEVICE_COOKIE) ?? ""
+  } catch {}
+
+  if (!id) {
+    id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
+
+  try { localStorage.setItem(DEVICE_COOKIE, id) } catch {}
+  setCookie(DEVICE_COOKIE, id)
+  return id
 }
 
-// Add random displacement ±0.015 degrees (~1.7km at equator)
-function addRandomDisplacement(coord: number) {
-  const displacement = (Math.random() - 0.5) * 0.03
-  return fuzzyCoord(coord + displacement)
+// Max precision (no rounding)
+function fuzzyCoord(n: number) {
+  return n
+}
+
+// Add randomized displacement of about 1km.
+function addRandomDisplacement(lat: number, lng: number) {
+  const minRadiusKm = 0.5
+  const maxRadiusKm = 1
+  const angle = Math.random() * Math.PI * 2
+  const distanceKm = minRadiusKm + Math.random() * (maxRadiusKm - minRadiusKm)
+
+  const deltaLat = (distanceKm * Math.cos(angle)) / 111
+  const lngScale = Math.max(0.2, Math.cos((lat * Math.PI) / 180))
+  const deltaLng = (distanceKm * Math.sin(angle)) / (111 * lngScale)
+
+  return {
+    lat: fuzzyCoord(lat + deltaLat),
+    lng: fuzzyCoord(lng + deltaLng),
+  }
 }
 
 type VisitorPin = { id: string; lat: number; lng: number; pixel_art: string }
@@ -66,6 +98,7 @@ export default function VisitorFooter({
   }, [onPinsLoaded])
 
   useEffect(() => {
+    getOrCreateDeviceId()
     loadPins()
     setHasPin(!!getCookie(COOKIE))
   }, [loadPins])
@@ -98,9 +131,10 @@ export default function VisitorFooter({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false)
+        const displaced = addRandomDisplacement(pos.coords.latitude, pos.coords.longitude)
         setPendingCoords({
-          lat: addRandomDisplacement(pos.coords.latitude),
-          lng: addRandomDisplacement(pos.coords.longitude),
+          lat: displaced.lat,
+          lng: displaced.lng,
         })
         setShowDrawer(true)
       },
@@ -132,10 +166,11 @@ export default function VisitorFooter({
     }
 
     try {
+      const deviceId = getOrCreateDeviceId()
       const res = await fetch("/api/visitor-pins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...pendingCoords, pixel_art: dataUrl }),
+        body: JSON.stringify({ ...pendingCoords, pixel_art: dataUrl, device_id: deviceId }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }

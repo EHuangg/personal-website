@@ -17,12 +17,8 @@ function sbFetch(path: string, opts?: RequestInit) {
   })
 }
 
-function getIpHash(req: NextRequest): string {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown"
-  return createHash("sha256").update(ip).digest("hex")
+function getDeviceHash(deviceId: string): string {
+  return createHash("sha256").update(deviceId).digest("hex")
 }
 
 // GET — fetch all pins
@@ -34,17 +30,17 @@ export async function GET() {
 
 // POST — submit a pin
 export async function POST(req: NextRequest) {
-  const { lat, lng, pixel_art } = await req.json()
+  const { lat, lng, pixel_art, device_id } = await req.json()
 
-  if (!lat || !lng || !pixel_art) {
+  if (!lat || !lng || !pixel_art || !device_id) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   }
 
-  const ip_hash = getIpHash(req)
-  console.log("[visitor-pins] POST", { lat, lng, ip_hash: ip_hash.slice(0, 8), supabase_url: !!SUPABASE_URL, anon_key: !!SUPABASE_ANON_KEY })
+  const ownerHash = getDeviceHash(String(device_id).trim())
+  console.log("[visitor-pins] POST", { lat, lng, device_hash: ownerHash.slice(0, 8), supabase_url: !!SUPABASE_URL, anon_key: !!SUPABASE_ANON_KEY })
 
-  // Check for existing pin with this IP
-  const check = await sbFetch(`/visitor_pins?ip_hash=eq.${ip_hash}&select=id`)
+  // We store device hash in ip_hash to avoid schema changes while enforcing one-pin-per-device.
+  const check = await sbFetch(`/visitor_pins?ip_hash=eq.${ownerHash}&select=id`)
   const existing = await check.json()
   if (existing?.length > 0) {
     return NextResponse.json({ error: "You already have a pin. Remove it first." }, { status: 409 })
@@ -52,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   const res = await sbFetch("/visitor_pins", {
     method: "POST",
-    body: JSON.stringify({ lat, lng, pixel_art, ip_hash }),
+    body: JSON.stringify({ lat, lng, pixel_art, ip_hash: ownerHash }),
   })
 
   if (!res.ok) {
