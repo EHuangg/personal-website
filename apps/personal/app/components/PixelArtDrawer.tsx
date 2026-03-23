@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from "react"
 
 const SIZE = 16
-const CELL = 20
+const BASE_CELL = 20
 
 const PALETTE = [
   "#000000", "#ffffff", "#ff3b30", "#ff9500", "#ffcc00",
@@ -29,6 +29,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
   const [erasing, setErasing] = useState(false)
   const [drawing, setDrawing] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [cellSize, setCellSize] = useState(BASE_CELL)
   const [sheetOffsetY, setSheetOffsetY] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sheetStartYRef = useRef<number | null>(null)
@@ -52,6 +53,25 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
     sheetDraggingRef.current = false
     sheetCanDragRef.current = false
     sheetOffsetRef.current = 0
+  }, [isMobile])
+
+  useEffect(() => {
+    if (!isMobile) {
+      setCellSize(BASE_CELL)
+      return
+    }
+
+    const recalc = () => {
+      const vh = window.innerHeight
+      const reservedHeight = 255
+      const fit = Math.floor(((vh * 0.96) - reservedHeight) / SIZE)
+      const next = Math.max(14, Math.min(BASE_CELL, fit))
+      setCellSize(next)
+    }
+
+    recalc()
+    window.addEventListener("resize", recalc)
+    return () => window.removeEventListener("resize", recalc)
   }, [isMobile])
 
   useEffect(() => {
@@ -90,27 +110,27 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
         } else {
           ctx.fillStyle = cell
         }
-        ctx.fillRect(x * CELL, y * CELL, CELL, CELL)
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize)
         // Grid line
         ctx.strokeStyle = "rgba(0,0,0,0.06)"
         ctx.lineWidth = 0.5
-        ctx.strokeRect(x * CELL, y * CELL, CELL, CELL)
+        ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize)
       }
     }
-  }, [grid])
+  }, [grid, cellSize])
 
   const paint = useCallback((ex: number, ey: number) => {
     const c = canvasRef.current!
     const rect = c.getBoundingClientRect()
-    const x = Math.floor((ex - rect.left) / CELL)
-    const y = Math.floor((ey - rect.top) / CELL)
+    const x = Math.floor((ex - rect.left) / cellSize)
+    const y = Math.floor((ey - rect.top) / cellSize)
     if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return
     setGrid((prev) => {
       const next = prev.map((r) => [...r])
       next[y][x] = erasing ? "" : color
       return next
     })
-  }, [color, erasing])
+  }, [color, erasing, cellSize])
 
   const toDataUrl = () => {
     const c = document.createElement("canvas")
@@ -168,7 +188,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
   const content = (
     <>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isMobile ? "0.75rem" : "1rem" }}>
         <div>
           <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#2a2318" }}>Leave your mark</div>
           <div style={{ fontSize: "0.65rem", color: "#9a8a72", marginTop: 2 }}>draw a 16×16 pixel art pin</div>
@@ -177,11 +197,11 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
       </div>
 
       {/* Canvas */}
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? "0.55rem" : "0.75rem" }}>
         <canvas
           ref={canvasRef}
-          width={SIZE * CELL}
-          height={SIZE * CELL}
+          width={SIZE * cellSize}
+          height={SIZE * cellSize}
           style={{
             borderRadius: 6,
             border: "1px solid #c8b89a",
@@ -211,13 +231,13 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
       </div>
 
       {/* Palette */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: "0.6rem", justifyContent: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: isMobile ? "0.45rem" : "0.6rem", justifyContent: "center" }}>
         {PALETTE.map((c) => (
           <button
             key={c}
             onClick={() => { setColor(c); setErasing(false) }}
             style={{
-              width: 22, height: 22, borderRadius: 4,
+              width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: 4,
               background: c,
               border: color === c && !erasing ? "2px solid #2a2318" : "1.5px solid rgba(0,0,0,0.15)",
               cursor: "pointer",
@@ -228,7 +248,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
       </div>
 
       {/* Controls */}
-      <div style={{ display: "flex", gap: 6, marginBottom: "0.75rem", justifyContent: "center" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: isMobile ? "0.6rem" : "0.75rem", justifyContent: "center" }}>
         <button
           onClick={() => setErasing((e) => !e)}
           style={{
@@ -276,7 +296,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
       <>
         <div className="mobile-detail-backdrop" onClick={onCancel} style={{ zIndex: 1000 }} />
         <div
-          className={`mobile-detail-sheet ${sheetDraggingRef.current ? "dragging" : ""}`}
+          className={`mobile-detail-sheet mobile-detail-sheet--drawer ${sheetDraggingRef.current ? "dragging" : ""}`}
           style={{ transform: `translateY(${sheetOffsetY}px)`, zIndex: 1001 }}
           onTouchStart={handleSheetTouchStart}
           onTouchMove={handleSheetTouchMove}
@@ -284,7 +304,7 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
           onTouchCancel={handleSheetTouchEnd}
         >
           <div className="mobile-detail-grabber" />
-          <div className="sidebar-scroll" ref={sheetScrollRef} style={{ padding: "0.25rem 1rem calc(1rem + env(safe-area-inset-bottom, 0))" }}>
+          <div className="sidebar-scroll" ref={sheetScrollRef} style={{ padding: "0.15rem 0.9rem calc(0.8rem + env(safe-area-inset-bottom, 0))" }}>
             {content}
           </div>
         </div>
