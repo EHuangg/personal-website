@@ -302,8 +302,8 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
   }
 
   .mobile-detail-sheet--drawer {
-    height: calc(100dvh - 6px);
-    max-height: calc(100dvh - 6px);
+    height: 76dvh;
+    max-height: 76dvh;
   }
 
   .mobile-detail-sheet--drawer .sidebar-scroll {
