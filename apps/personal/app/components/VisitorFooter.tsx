@@ -301,7 +301,7 @@ export default function VisitorFooter({
             cursor: locating || submitting ? "not-allowed" : "pointer",
             letterSpacing: "0.04em",
           }}>
-            {locating ? "finding your location..." : submitting ? "saving..." : "leave a sticky"}
+            {locating ? "finding your location..." : submitting ? "saving..." : "leave a sticky note :)"}
           </button>
         ) : (
           <div style={{ display: "flex", gap: 6 }}>
