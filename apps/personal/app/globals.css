@@ -212,6 +212,22 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
   to { transform: rotate(360deg); }
 }
 
+@keyframes mobileSheetIn {
+  from {
+    transform: translateY(18px);
+    opacity: 0.96;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes mobileBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (max-width: 640px) {
   .main { flex-direction: column-reverse; }
   .sidebar {
@@ -244,6 +260,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     inset: 0;
     background: rgba(0, 0, 0, 0.18);
     z-index: 120;
+    animation: mobileBackdropIn 180ms ease-out;
   }
 
   .mobile-detail-sheet {
@@ -262,7 +279,14 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.16);
     z-index: 130;
     overflow: hidden;
-    touch-action: none;
+    touch-action: pan-y;
+    will-change: transform;
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: mobileSheetIn 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .mobile-detail-sheet.dragging {
+    transition: none;
   }
 
   .mobile-detail-grabber {
@@ -272,5 +296,6 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     background: var(--ink-faint);
     margin: 10px auto 8px;
     flex-shrink: 0;
+    touch-action: none;
   }
 }

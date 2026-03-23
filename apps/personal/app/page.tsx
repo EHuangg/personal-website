@@ -226,8 +226,14 @@ function Clock() {
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
+  const sheetStartYRef = useRef<number | null>(null)
+  const sheetDraggingRef = useRef(false)
+  const sheetCanDragRef = useRef(false)
+  const sheetOffsetRef = useRef(0)
+  const sheetScrollRef = useRef<HTMLDivElement | null>(null)
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
+  const [sheetOffsetY, setSheetOffsetY] = useState(0)
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
@@ -429,6 +435,53 @@ export default function FindEvan() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
+
+  useEffect(() => {
+    setSheetOffsetY(0)
+    sheetStartYRef.current = null
+    sheetDraggingRef.current = false
+    sheetCanDragRef.current = false
+    sheetOffsetRef.current = 0
+  }, [expandedPin])
+
+  const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    sheetStartYRef.current = e.touches[0].clientY
+    const target = e.target as HTMLElement
+    const fromGrabber = !!target.closest(".mobile-detail-grabber")
+    const atTop = (sheetScrollRef.current?.scrollTop ?? 0) <= 0
+    sheetCanDragRef.current = fromGrabber || atTop
+    sheetDraggingRef.current = sheetCanDragRef.current
+  }, [])
+
+  const handleSheetTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!sheetDraggingRef.current || !sheetCanDragRef.current || sheetStartYRef.current === null) return
+    const delta = e.touches[0].clientY - sheetStartYRef.current
+    if (delta <= 0) {
+      setSheetOffsetY(0)
+      sheetOffsetRef.current = 0
+      return
+    }
+    e.preventDefault()
+    const next = Math.min(380, delta)
+    setSheetOffsetY(next)
+    sheetOffsetRef.current = next
+  }, [])
+
+  const handleSheetTouchEnd = useCallback(() => {
+    if (!sheetDraggingRef.current) return
+    sheetDraggingRef.current = false
+    sheetCanDragRef.current = false
+    sheetStartYRef.current = null
+
+    if (sheetOffsetRef.current > 120 && expandedPin) {
+      togglePin(expandedPin)
+      return
+    }
+
+    setSheetOffsetY(0)
+    sheetOffsetRef.current = 0
+  }, [expandedPin, togglePin])
+
   return (
     <div className="app">
       <div className="topbar">
@@ -552,9 +605,16 @@ export default function FindEvan() {
       {expandedPinData && (
         <>
           <div className="mobile-detail-backdrop" onClick={() => togglePin(expandedPinData.id)} />
-          <div className="mobile-detail-sheet">
+          <div
+            className={`mobile-detail-sheet ${sheetDraggingRef.current ? "dragging" : ""}`}
+            style={{ transform: `translateY(${sheetOffsetY}px)` }}
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+            onTouchCancel={handleSheetTouchEnd}
+          >
             <div className="mobile-detail-grabber" />
-            <div className="sidebar-scroll" style={{ paddingBottom: "1rem" }}>
+            <div className="sidebar-scroll" ref={sheetScrollRef} style={{ paddingBottom: "1rem" }}>
               <div style={{ padding: "0.75rem 1rem 0" }}>
                 <button onClick={() => togglePin(expandedPinData.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
                   ‹ back
