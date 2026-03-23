@@ -250,9 +250,12 @@ export default function FindEvan() {
   const drawPinImage = useCallback((pin: Pin, active: boolean): Promise<HTMLCanvasElement> => {
     return new Promise((resolve) => {
       const size = active ? 80 : 60
+      const pixelRatio = 2
       const c = document.createElement("canvas")
-      c.width = size; c.height = size
+      c.width = size * pixelRatio
+      c.height = size * pixelRatio
       const ctx = c.getContext("2d")!
+      ctx.scale(pixelRatio, pixelRatio)
       const cx = size / 2, cy = size / 2, r = size / 2 - 3
 
       const draw = (img?: HTMLImageElement) => {
@@ -282,7 +285,7 @@ export default function FindEvan() {
         }
         resolve(c)
       }
-      if (!pin.notFound) {
+      if (!pin.notFound || pin.id === "projects") {
         const img = new Image()
         img.onload = () => draw(img); img.onerror = () => draw()
         img.src = `/pins/${pin.id}.jpg`
@@ -329,46 +332,22 @@ export default function FindEvan() {
 
       map.on("load", () => {
         if (cancelled) return
-        const registerAll = PINS.filter(p => !p.notFound).flatMap((pin) =>
+        const registerAll = PINS.flatMap((pin) =>
           (["idle", "active"] as const).map(async (state) => {
             const key = `pin-${pin.id}-${state}`
             if (map.hasImage(key)) return
             const canvas = await drawPinImage(pin, state === "active")
             const imgData = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height)
-            map.addImage(key, { width: canvas.width, height: canvas.height, data: new Uint8Array(imgData.data.buffer) })
+            map.addImage(
+              key,
+              { width: canvas.width, height: canvas.height, data: new Uint8Array(imgData.data.buffer) },
+              { pixelRatio: 2 }
+            )
           })
         )
 
         Promise.all(registerAll).then(() => {
           if (cancelled) return
-          const size = 60
-          let angle = 0
-          const animatedImage = {
-            width: size, height: size,
-            data: new Uint8Array(size * size * 4),
-            onAdd() {},
-            render() {
-              const c = document.createElement("canvas"); c.width = size; c.height = size
-              const ctx = c.getContext("2d")!
-              const cx = size / 2, cy = size / 2, r = size / 2 - 3
-              ctx.shadowColor = "rgba(0,0,0,0.2)"; ctx.shadowBlur = 5; ctx.shadowOffsetY = 1
-              ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = "white"; ctx.fill()
-              ctx.shadowColor = "transparent"
-              ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r - 3, 0, Math.PI * 2); ctx.clip()
-              ctx.fillStyle = "#8e8e93"; ctx.fillRect(0, 0, size, size)
-              ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "bold 18px sans-serif"
-              ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("📁", cx, cy)
-              ctx.restore()
-              ctx.beginPath(); ctx.arc(cx, cy, r - 1, angle, angle + Math.PI * 0.7)
-              ctx.strokeStyle = "#30b94d"; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.stroke()
-              angle += 0.06
-              const d = ctx.getImageData(0, 0, size, size); this.data = new Uint8Array(d.data.buffer)
-              map.triggerRepaint(); return true
-            },
-          }
-          if (!map.hasImage("pin-projects-idle")) map.addImage("pin-projects-idle", animatedImage as unknown as { width: number; height: number; data: Uint8Array }, { pixelRatio: 1 })
-          if (!map.hasImage("pin-projects-active")) map.addImage("pin-projects-active", animatedImage as unknown as { width: number; height: number; data: Uint8Array }, { pixelRatio: 1 })
-
           map.addSource("pins", { type: "geojson", data: geojsonData(null) })
           map.addLayer({ id: "pins-layer", type: "symbol", source: "pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1 } })
 
@@ -659,7 +638,7 @@ export default function FindEvan() {
 
 function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   const [err, setErr] = useState(false)
-  if (pin.notFound) {
+  if (pin.notFound && pin.id !== "projects") {
     return (
       <div style={{ width: size, height: size, borderRadius: "50%", background: "#8e8e93", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, flexShrink: 0, position: "relative", overflow: "hidden" }}>
         <span style={{ filter: "brightness(0) invert(0.5)" }}>📁</span>
