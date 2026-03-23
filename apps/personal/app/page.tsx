@@ -23,6 +23,11 @@ type Pin = {
   notFound?: boolean
 }
 
+type RouteSuggestion = {
+  name: string
+  center: [number, number]
+}
+
 const PINS: Pin[] = [
   { id: "evan",       label: "Evan Huang",             sub: "Oakville, ON",                           icon: "🏠", emoji: "👤", iconBg: "#8fc4e8", lng: -79.6877,           lat: 43.4675,           zoom: 13 },
   { id: "uow",        label: "University of Waterloo", sub: "Waterloo, ON · B.Sc. Mathematics",        icon: "🎓", emoji: "🎓", iconBg: "#f6c98f", lng: -80.5448,           lat: 43.4723,           zoom: 15 },
@@ -125,6 +130,7 @@ declare global {
 
 type MapboxMap = {
   flyTo: (opts: object) => void
+  fitBounds: (bounds: [[number, number], [number, number]], opts?: object) => void
   addControl: (control: object, position?: string) => void
   addSource: (id: string, source: object) => void
   addLayer: (layer: object) => void
@@ -226,6 +232,12 @@ const SIDEBAR_MAP_STYLE = {
 }
 
 const MAP_STYLE_URL = "mapbox://styles/mapbox/streets-v12"
+const ROUTE_SOURCE_ID = "route-line"
+const ROUTE_LAYER_ID = "route-line-layer"
+const ROUTE_DEST_SOURCE_ID = "route-destination"
+const ROUTE_DEST_LAYER_ID = "route-destination-layer"
+const ROUTE_DEST_ICON_ID = "route-destination-pin"
+const OAKVILLE_ORIGIN: [number, number] = [PINS[0].lng, PINS[0].lat]
 
 ////// Clock //////////////////////////////////
 
@@ -280,6 +292,13 @@ export default function FindEvan() {
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
+  const [destinationQuery, setDestinationQuery] = useState("")
+  const [routeStatus, setRouteStatus] = useState("")
+  const [routing, setRouting] = useState(false)
+  const [hasRoute, setHasRoute] = useState(false)
+  const [routeSuggestions, setRouteSuggestions] = useState<RouteSuggestion[]>([])
+  const [selectedSuggestion, setSelectedSuggestion] = useState<RouteSuggestion | null>(null)
+  const [showSuggestions, setShowSuggestions] = useState(false)
 
   const geojsonData = useCallback((active: PinId | null) => ({
     type: "FeatureCollection",
@@ -358,6 +377,140 @@ export default function FindEvan() {
       return next
     })
   }, [geojsonData])
+
+  const handleRouteSearch = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const map = mapRef.current
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+    const query = destinationQuery.trim()
+    if (!map || !token || !query) return
+
+    setRouting(true)
+    setRouteStatus("finding route...")
+    setShowSuggestions(false)
+    setHasRoute(false)
+    map.getSource(ROUTE_SOURCE_ID)?.setData({
+      type: "FeatureCollection",
+      features: [],
+    } as unknown as object)
+    map.getSource(ROUTE_DEST_SOURCE_ID)?.setData({
+      type: "FeatureCollection",
+      features: [],
+    } as unknown as object)
+
+    try {
+      const picked = selectedSuggestion && selectedSuggestion.name === query ? selectedSuggestion : null
+      let destination = picked?.center
+      let placeName = picked?.name ?? query
+
+      if (!destination) {
+        const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1&autocomplete=true&proximity=${OAKVILLE_ORIGIN[0]},${OAKVILLE_ORIGIN[1]}`
+        const geocodeRes = await fetch(geocodeUrl)
+        if (!geocodeRes.ok) throw new Error("geocode failed")
+        const geocodeData = await geocodeRes.json() as { features?: Array<{ center?: [number, number]; place_name?: string }> }
+        destination = geocodeData.features?.[0]?.center
+        placeName = geocodeData.features?.[0]?.place_name ?? query
+      }
+
+      if (!destination) {
+        setRouteStatus("destination not found")
+        return
+      }
+
+      const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${OAKVILLE_ORIGIN[0]},${OAKVILLE_ORIGIN[1]};${destination[0]},${destination[1]}?geometries=geojson&overview=full&access_token=${token}`
+      const directionsRes = await fetch(directionsUrl)
+      if (!directionsRes.ok) throw new Error("directions failed")
+      const directionsData = await directionsRes.json() as {
+        routes?: Array<{ distance?: number; duration?: number; geometry?: { coordinates?: [number, number][] } }>
+      }
+      const route = directionsData.routes?.[0]
+      const coords = route?.geometry?.coordinates
+      if (!route || !coords || coords.length < 2) {
+        setRouteStatus("no drivable route found")
+        return
+      }
+
+      map.getSource(ROUTE_SOURCE_ID)?.setData({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} }],
+      } as unknown as object)
+      map.getSource(ROUTE_DEST_SOURCE_ID)?.setData({
+        type: "FeatureCollection",
+        features: [{ type: "Feature", geometry: { type: "Point", coordinates: destination }, properties: {} }],
+      } as unknown as object)
+      setHasRoute(true)
+
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity
+      for (const [lng, lat] of coords) {
+        if (lng < minLng) minLng = lng
+        if (lat < minLat) minLat = lat
+        if (lng > maxLng) maxLng = lng
+        if (lat > maxLat) maxLat = lat
+      }
+      map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 80, duration: 900 })
+
+      const km = (route.distance ?? 0) / 1000
+      const mins = Math.round((route.duration ?? 0) / 60)
+      setRouteStatus(`${km.toFixed(1)} km · ${mins} min to ${placeName}`)
+    } catch {
+      setRouteStatus("route unavailable right now")
+    } finally {
+      setRouting(false)
+    }
+  }, [destinationQuery, selectedSuggestion])
+
+  const clearRoute = useCallback(() => {
+    mapRef.current?.getSource(ROUTE_SOURCE_ID)?.setData({
+      type: "FeatureCollection",
+      features: [],
+    } as unknown as object)
+    mapRef.current?.getSource(ROUTE_DEST_SOURCE_ID)?.setData({
+      type: "FeatureCollection",
+      features: [],
+    } as unknown as object)
+    setHasRoute(false)
+    setDestinationQuery("")
+    setSelectedSuggestion(null)
+    setRouteSuggestions([])
+    setShowSuggestions(false)
+    setRouteStatus("")
+  }, [])
+
+  useEffect(() => {
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
+    const query = destinationQuery.trim()
+
+    if (!token || query.length < 2) {
+      setRouteSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      try {
+        const suggestUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&autocomplete=true&proximity=${OAKVILLE_ORIGIN[0]},${OAKVILLE_ORIGIN[1]}`
+        const res = await fetch(suggestUrl)
+        if (!res.ok) throw new Error("suggest failed")
+        const data = await res.json() as { features?: Array<{ center?: [number, number]; place_name?: string }> }
+        if (cancelled) return
+        const suggestions = (data.features ?? [])
+          .filter((f): f is { center: [number, number]; place_name: string } => Array.isArray(f.center) && typeof f.place_name === "string")
+          .map((f) => ({ name: f.place_name, center: f.center }))
+        setRouteSuggestions(suggestions)
+        setShowSuggestions(suggestions.length > 0)
+      } catch {
+        if (cancelled) return
+        setRouteSuggestions([])
+        setShowSuggestions(false)
+      }
+    }, 180)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [destinationQuery])
 
   // Init map
   useEffect(() => {
@@ -573,12 +726,96 @@ export default function FindEvan() {
           map.addSource("visitor-pins", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
           map.addLayer({ id: "visitor-pins-layer", type: "symbol", source: "visitor-pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1, "visibility": "none" } })
 
+          map.addSource(ROUTE_SOURCE_ID, { type: "geojson", data: { type: "FeatureCollection", features: [] } })
+          map.addLayer({
+            id: ROUTE_LAYER_ID,
+            type: "line",
+            source: ROUTE_SOURCE_ID,
+            paint: {
+              "line-color": "#0a84ff",
+              "line-width": 3,
+              "line-opacity": 0.88,
+            },
+            layout: {
+              "line-cap": "round",
+              "line-join": "round",
+            },
+          })
+
+          if (!map.hasImage(ROUTE_DEST_ICON_ID)) {
+            const c = document.createElement("canvas")
+            c.width = 72
+            c.height = 72
+            const ctx = c.getContext("2d")!
+
+            // Dark red needle-style pin with a silver metallic base.
+            ctx.beginPath()
+            ctx.moveTo(36, 60)
+            ctx.lineTo(28, 43)
+            ctx.lineTo(44, 43)
+            ctx.closePath()
+            ctx.fillStyle = "#8e1f2f"
+            ctx.fill()
+
+            ctx.beginPath()
+            ctx.arc(36, 30, 15, 0, Math.PI * 2)
+            ctx.fillStyle = "#9f2a3a"
+            ctx.fill()
+
+            ctx.beginPath()
+            ctx.arc(36, 30, 15, 0, Math.PI * 2)
+            ctx.strokeStyle = "#6f1421"
+            ctx.lineWidth = 2.2
+            ctx.stroke()
+
+            ctx.beginPath()
+            ctx.arc(36, 30, 6, 0, Math.PI * 2)
+            ctx.fillStyle = "#f5e8e8"
+            ctx.fill()
+
+            ctx.beginPath()
+            ctx.moveTo(36, 62)
+            ctx.lineTo(32.5, 68)
+            ctx.lineTo(39.5, 68)
+            ctx.closePath()
+            ctx.fillStyle = "#c9cdd3"
+            ctx.fill()
+
+            ctx.beginPath()
+            ctx.moveTo(36, 62)
+            ctx.lineTo(32.5, 68)
+            ctx.lineTo(39.5, 68)
+            ctx.closePath()
+            ctx.strokeStyle = "#8e949c"
+            ctx.lineWidth = 1
+            ctx.stroke()
+
+            const d = ctx.getImageData(0, 0, c.width, c.height)
+            map.addImage(ROUTE_DEST_ICON_ID, { width: c.width, height: c.height, data: new Uint8Array(d.data.buffer) }, { pixelRatio: 2 })
+          }
+
+          map.addSource(ROUTE_DEST_SOURCE_ID, { type: "geojson", data: { type: "FeatureCollection", features: [] } })
+          map.addLayer({
+            id: ROUTE_DEST_LAYER_ID,
+            type: "symbol",
+            source: ROUTE_DEST_SOURCE_ID,
+            layout: {
+              "icon-image": ROUTE_DEST_ICON_ID,
+              "icon-anchor": "bottom",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-size": 1.24,
+            },
+          })
+
           const labelLayerIds = (mapAny.getStyle().layers ?? [])
             .filter((layer) => layer.type === "symbol" && /(label|place|road|poi|transit)/i.test(layer.id))
             .map((layer) => layer.id)
           for (const id of labelLayerIds) {
             try { mapAny.moveLayer(id) } catch {}
           }
+          try { mapAny.moveLayer(ROUTE_LAYER_ID) } catch {}
+          try { mapAny.moveLayer(ROUTE_DEST_LAYER_ID) } catch {}
           try { mapAny.moveLayer("pins-layer") } catch {}
           try { mapAny.moveLayer("visitor-pins-layer") } catch {}
 
@@ -803,6 +1040,119 @@ export default function FindEvan() {
         </aside>
 
         <div className="map-wrap">
+          <div style={{
+            position: "absolute",
+            top: 10,
+            left: 10,
+            zIndex: 60,
+            background: "rgba(250,247,242,0.95)",
+            border: "0.5px solid var(--ink-faint)",
+            borderRadius: 10,
+            boxShadow: "0 4px 14px rgba(0,0,0,0.1)",
+            padding: "0.5rem",
+            width: "min(360px, calc(100% - 20px))",
+          }}>
+            <form onSubmit={handleRouteSearch} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                value={destinationQuery}
+                onChange={(ev) => {
+                  setDestinationQuery(ev.currentTarget.value)
+                  setSelectedSuggestion(null)
+                }}
+                onFocus={() => setShowSuggestions(routeSuggestions.length > 0)}
+                placeholder="Route from Evan to..."
+                autoComplete="off"
+                style={{
+                  flex: 1,
+                  border: "0.5px solid var(--ink-faint)",
+                  borderRadius: 7,
+                  padding: "0.4rem 0.5rem",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.72rem",
+                  color: "var(--ink)",
+                  background: "#fff",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={routing || destinationQuery.trim().length === 0}
+                style={{
+                  border: "none",
+                  borderRadius: 7,
+                  padding: "0.4rem 0.65rem",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.72rem",
+                  background: routing ? "#c8b89a" : "#2a2318",
+                  color: "#f5f0e8",
+                  cursor: routing ? "not-allowed" : "pointer",
+                }}
+              >
+                {routing ? "..." : "route"}
+              </button>
+              {hasRoute && (
+                <button
+                  type="button"
+                  onClick={clearRoute}
+                  aria-label="Clear route"
+                  title="Clear route"
+                  style={{
+                    border: "0.5px solid #d8a7a7",
+                    borderRadius: 7,
+                    padding: "0.24rem 0.55rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.7rem",
+                    background: "#f4d8d8",
+                    color: "#8c4f4f",
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  X
+                </button>
+              )}
+            </form>
+            {showSuggestions && routeSuggestions.length > 0 && (
+              <div style={{
+                marginTop: 6,
+                border: "0.5px solid var(--ink-faint)",
+                borderRadius: 7,
+                background: "#fff",
+                maxHeight: 170,
+                overflowY: "auto",
+              }}>
+                {routeSuggestions.map((s) => (
+                  <button
+                    key={`${s.name}-${s.center[0]}-${s.center[1]}`}
+                    type="button"
+                    onClick={() => {
+                      setDestinationQuery(s.name)
+                      setSelectedSuggestion(s)
+                      setShowSuggestions(false)
+                    }}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      border: "none",
+                      borderBottom: "0.5px solid var(--ink-faint)",
+                      background: "transparent",
+                      padding: "0.45rem 0.5rem",
+                      cursor: "pointer",
+                      color: "var(--ink)",
+                      fontSize: "0.7rem",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {routeStatus && (
+              <div style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: "0.66rem", color: "var(--ink-muted)" }}>
+                {routeStatus}
+              </div>
+            )}
+          </div>
           <div id="mapbox-container" />
           {!mapReady && (
             <div style={{ position: "absolute", inset: 0, background: "#e8e0d4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "#9a8a72" }}>
