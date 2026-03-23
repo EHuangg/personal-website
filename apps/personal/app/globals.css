@@ -202,11 +202,6 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
   will-change: transform;
 }
 
-.mobile-detail-backdrop,
-.mobile-detail-sheet {
-  display: none;
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -221,6 +216,7 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     min-height: 260px;
     border-right: none;
     border-top: 0.5px solid var(--ink-faint);
+    touch-action: none;
   }
   .map-wrap {
     height: auto;
@@ -236,46 +232,5 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
     transform: translateX(0) !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-  }
-
-  .mobile-detail-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.18);
-    z-index: 120;
-  }
-
-  .mobile-detail-sheet {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    left: calc(50% + var(--sheet-x, 0px));
-    bottom: calc(0px - var(--sheet-y, 0px));
-    transform: translateX(-50%);
-    width: min(90vw, 380px);
-    height: auto;
-    max-height: 76dvh;
-    background: var(--sidebar-bg);
-    border-radius: 18px;
-    border: 0.5px solid var(--ink-faint);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
-    z-index: 130;
-    overflow: hidden;
-    touch-action: none;
-    transition: bottom 220ms cubic-bezier(0.2, 0.8, 0.2, 1), left 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  .mobile-detail-sheet.dragging {
-    transition: none;
-  }
-
-  .mobile-detail-grabber {
-    width: 42px;
-    height: 4px;
-    border-radius: 4px;
-    background: var(--ink-faint);
-    margin: 10px auto 8px;
-    flex-shrink: 0;
   }
 }

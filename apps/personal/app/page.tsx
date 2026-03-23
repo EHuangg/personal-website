@@ -226,12 +226,12 @@ function Clock() {
 
 export default function FindEvan() {
   const mapRef = useRef<MapboxMap | null>(null)
-  const sheetStartRef = useRef<{ x: number; y: number } | null>(null)
-  const sheetPositionRef = useRef({ x: 0, y: 0 })
-  const sheetDraggingRef = useRef(false)
+  const sidebarDragStartRef = useRef<number | null>(null)
+  const sidebarDraggingRef = useRef(false)
+  const sidebarOffsetRef = useRef(0)
   const [activePin, setActivePin] = useState<PinId | null>(null)
   const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
-  const [sheetPos, setSheetPos] = useState({ x: 0, y: 0 })
+  const [sidebarOffsetY, setSidebarOffsetY] = useState(0)
   const [mapReady, setMapReady] = useState(false)
   const [showVisitorPins, setShowVisitorPins] = useState(false)
   const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
@@ -435,39 +435,45 @@ export default function FindEvan() {
   const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
 
   useEffect(() => {
-    setSheetPos({ x: 0, y: 0 })
-    sheetPositionRef.current = { x: 0, y: 0 }
-    sheetStartRef.current = null
-    sheetDraggingRef.current = false
-  }, [expandedPin])
-
-  const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    sheetDraggingRef.current = true
-    sheetStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    setSidebarOffsetY(0)
+    sidebarDragStartRef.current = null
+    sidebarDraggingRef.current = false
+    sidebarOffsetRef.current = 0
   }, [])
 
-  const handleSheetTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sheetDraggingRef.current || !sheetStartRef.current) return
-    e.preventDefault()
-    const deltaX = e.touches[0].clientX - sheetStartRef.current.x
-    const deltaY = e.touches[0].clientY - sheetStartRef.current.y
-    sheetPositionRef.current = { x: deltaX, y: deltaY }
-    setSheetPos({ x: deltaX, y: deltaY })
+  const handleSidebarTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    sidebarDraggingRef.current = true
+    sidebarDragStartRef.current = e.touches[0].clientY
   }, [])
 
-  const handleSheetTouchEnd = useCallback(() => {
-    if (!sheetDraggingRef.current) return
-    sheetDraggingRef.current = false
-    // Dismiss if dragged down > 120px
-    if (sheetPositionRef.current.y > 120 && expandedPin) {
-      togglePin(expandedPin)
+  const handleSidebarTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!sidebarDraggingRef.current || sidebarDragStartRef.current === null) return
+    const delta = e.touches[0].clientY - sidebarDragStartRef.current
+    if (delta <= 0) {
+      setSidebarOffsetY(0)
+      sidebarOffsetRef.current = 0
       return
     }
-    // Otherwise, snap back to origin
-    setSheetPos({ x: 0, y: 0 })
-    sheetPositionRef.current = { x: 0, y: 0 }
-    sheetStartRef.current = null
-  }, [expandedPin, togglePin])
+    e.preventDefault()
+    const offset = Math.min(400, delta)
+    setSidebarOffsetY(offset)
+    sidebarOffsetRef.current = offset
+  }, [])
+
+  const handleSidebarTouchEnd = useCallback(() => {
+    if (!sidebarDraggingRef.current) return
+    sidebarDraggingRef.current = false
+    sidebarDragStartRef.current = null
+    if (sidebarOffsetRef.current > 100) {
+      // Dismiss sidebar by dragging down far enough
+      setSidebarOffsetY(400)
+      sidebarOffsetRef.current = 400
+      return
+    }
+    // Otherwise snap back to top
+    setSidebarOffsetY(0)
+    sidebarOffsetRef.current = 0
+  }, [])
 
   return (
     <div className="app">
@@ -478,7 +484,17 @@ export default function FindEvan() {
       </div>
 
       <div className="main">
-        <aside className="sidebar">
+        <aside
+          className="sidebar"
+          onTouchStart={handleSidebarTouchStart}
+          onTouchMove={handleSidebarTouchMove}
+          onTouchEnd={handleSidebarTouchEnd}
+          onTouchCancel={handleSidebarTouchEnd}
+          style={{
+            transform: `translateY(${sidebarOffsetY}px)`,
+            transition: sidebarDraggingRef.current ? "none" : "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+          }}
+        >
           {/* ── Expanded detail ── */}
           <div className="sidebar-panel sidebar-panel--expanded" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
             {expandedPinData && (
@@ -587,64 +603,6 @@ export default function FindEvan() {
           )}
         </div>
       </div>
-
-      {expandedPinData && (
-        <>
-          <div className="mobile-detail-backdrop" onClick={() => togglePin(expandedPinData.id)} />
-          <div
-            className={`mobile-detail-sheet ${sheetDraggingRef.current ? "dragging" : ""}`}
-            style={{
-              "--sheet-x": `${sheetPos.x}px`,
-              "--sheet-y": `${sheetPos.y}px`,
-            } as React.CSSProperties}
-            onTouchStart={handleSheetTouchStart}
-            onTouchMove={handleSheetTouchMove}
-            onTouchEnd={handleSheetTouchEnd}
-            onTouchCancel={handleSheetTouchEnd}
-          >
-            <div
-              className="mobile-detail-grabber"
-              style={{ cursor: "grab", touchAction: "none" }}
-            />
-            <div className="sidebar-scroll" style={{ paddingBottom: "1rem" }}>
-              <div style={{ padding: "0.75rem 1rem 0" }}>
-                <button onClick={() => togglePin(expandedPinData.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
-                  ‹ back
-                </button>
-                {expandedPinData.id === "evan" ? (
-                  <div style={{ marginBottom: "0.75rem" }}>
-                    <div style={{
-                      width: "100%", aspectRatio: "1", borderRadius: 8,
-                      overflow: "hidden", background: "#0a84ff",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      marginBottom: "0.6rem",
-                    }}>
-                      <img src="/pins/evan.jpg" alt="Evan Huang"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                    </div>
-                    <div className="hero-name" style={{ fontSize: "1.1rem" }}>Evan Huang</div>
-                    <div className="hero-sub">Oakville, ON · Mathematics · UWaterloo</div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-                    <PinAvatar pin={expandedPinData} size={48} />
-                    <div>
-                      <div className="hero-name">{expandedPinData.label}</div>
-                      <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {expandedPinData.id === "evan" && <EvanDetail />}
-              {expandedPinData.id === "uow" && <UoWDetail />}
-              {expandedPinData.id === "blackberry" && <ExperienceDetail job={siteConfig.experience[0]} />}
-              {expandedPinData.id === "compugen" && <ExperienceDetail job={siteConfig.experience[1]} />}
-              {expandedPinData.id === "projects" && <ProjectsDetail />}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }
