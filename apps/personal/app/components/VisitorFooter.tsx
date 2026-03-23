@@ -169,7 +169,7 @@ export default function VisitorFooter({
       const deviceId = getOrCreateDeviceId()
       const res = await fetch("/api/visitor-pins", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-device-id": deviceId },
         body: JSON.stringify({ ...pendingCoords, pixel_art: dataUrl, device_id: deviceId }),
       })
       const data = await res.json()

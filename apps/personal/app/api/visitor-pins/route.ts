@@ -21,6 +21,15 @@ function getDeviceHash(deviceId: string): string {
   return createHash("sha256").update(deviceId).digest("hex")
 }
 
+function getFallbackDeviceId(req: NextRequest): string {
+  const ua = req.headers.get("user-agent") ?? ""
+  const chUa = req.headers.get("sec-ch-ua") ?? ""
+  const chMobile = req.headers.get("sec-ch-ua-mobile") ?? ""
+  const chPlatform = req.headers.get("sec-ch-ua-platform") ?? ""
+  const lang = req.headers.get("accept-language") ?? ""
+  return `${ua}|${chUa}|${chMobile}|${chPlatform}|${lang}`
+}
+
 // GET — fetch all pins
 export async function GET() {
   const res = await sbFetch("/visitor_pins?select=id,lat,lng,pixel_art,created_at&order=created_at.asc")
@@ -32,11 +41,14 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { lat, lng, pixel_art, device_id } = await req.json()
 
-  if (!lat || !lng || !pixel_art || !device_id) {
+  if (typeof lat !== "number" || typeof lng !== "number" || !pixel_art) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   }
 
-  const ownerHash = getDeviceHash(String(device_id).trim())
+  const cookieDeviceId = req.cookies.get("visitor_device_id")?.value
+  const rawDeviceId = (typeof device_id === "string" && device_id.trim()) || cookieDeviceId || getFallbackDeviceId(req)
+
+  const ownerHash = getDeviceHash(rawDeviceId)
   console.log("[visitor-pins] POST", { lat, lng, device_hash: ownerHash.slice(0, 8), supabase_url: !!SUPABASE_URL, anon_key: !!SUPABASE_ANON_KEY })
 
   // We store device hash in ip_hash to avoid schema changes while enforcing one-pin-per-device.
