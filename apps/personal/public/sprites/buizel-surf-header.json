@@ -1,0 +1,131 @@
+{ "frames": {
+   "buizel surf header 0.ase": {
+    "frame": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 1.ase": {
+    "frame": { "x": 768, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 2.ase": {
+    "frame": { "x": 1536, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 3.ase": {
+    "frame": { "x": 2304, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 4.ase": {
+    "frame": { "x": 3072, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 5.ase": {
+    "frame": { "x": 3840, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 6.ase": {
+    "frame": { "x": 4608, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 7.ase": {
+    "frame": { "x": 5376, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 8.ase": {
+    "frame": { "x": 6144, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 9.ase": {
+    "frame": { "x": 6912, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 10.ase": {
+    "frame": { "x": 7680, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 11.ase": {
+    "frame": { "x": 8448, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 12.ase": {
+    "frame": { "x": 9216, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   },
+   "buizel surf header 13.ase": {
+    "frame": { "x": 9984, "y": 0, "w": 768, "h": 16 },
+    "rotated": false,
+    "trimmed": false,
+    "spriteSourceSize": { "x": 0, "y": 0, "w": 768, "h": 16 },
+    "sourceSize": { "w": 768, "h": 16 },
+    "duration": 100
+   }
+ },
+ "meta": {
+  "app": "https://github.com/LibreSprite/LibreSprite/",
+  "version": "1.1-dev",
+  "image": "C:\\Users\\Evan\\Documents\\GitHub\\personal-website\\apps\\personal\\public\\sprites\\buizel-surf-header.png",
+  "format": "RGBA8888",
+  "size": { "w": 10752, "h": 16 },
+  "scale": "1",
+  "frameTags": [
+  ],
+  "layers": [
+   { "name": "Layer 4", "opacity": 116, "blendMode": "normal" },
+   { "name": "Layer 1", "opacity": 255, "blendMode": "normal" },
+   { "name": "Layer 2", "opacity": 255, "blendMode": "normal" },
+   { "name": "Layer 3", "opacity": 255, "blendMode": "normal" }
+  ]
+ }
+}

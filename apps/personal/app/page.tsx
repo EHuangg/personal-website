@@ -307,6 +307,7 @@ export default function FindEvan() {
   const [routeSuggestions, setRouteSuggestions] = useState<RouteSuggestion[]>([])
   const [selectedSuggestion, setSelectedSuggestion] = useState<RouteSuggestion | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [headerAnimTrigger, setHeaderAnimTrigger] = useState(0)
 
   const geojsonData = useCallback((active: PinId | null) => ({
     type: "FeatureCollection",
@@ -938,10 +939,13 @@ export default function FindEvan() {
 
   return (
     <div className="app">
-      <div className="topbar">
-        <TopbarAnimatedLogo />
-        <span className="topbar-title">Evan Maps</span>
-        <span className="topbar-subtitle">evan-huang.dev</span>
+      <div className="topbar" style={{ position: "relative", overflow: "hidden" }}>
+        <TopbarSurfAnimation trigger={headerAnimTrigger} />
+        <div style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center" }}>
+          <TopbarAnimatedLogo onActivate={() => setHeaderAnimTrigger((prev) => prev + 1)} />
+        </div>
+        <span className="topbar-title" style={{ position: "relative", zIndex: 2 }}>Evan Maps</span>
+        <span className="topbar-subtitle" style={{ position: "relative", zIndex: 2 }}>evan-huang.dev</span>
       </div>
 
       <div className="main">
@@ -1223,7 +1227,121 @@ export default function FindEvan() {
   )
 }
 
-function TopbarAnimatedLogo() {
+function TopbarSurfAnimation({ trigger }: { trigger: number }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [spriteImage, setSpriteImage] = useState<HTMLImageElement | null>(null)
+  const [frames, setFrames] = useState<SpriteFrame[]>([])
+  const [frameIndex, setFrameIndex] = useState(0)
+  const [active, setActive] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSprite = async () => {
+      try {
+        const res = await fetch("/sprites/buizel-surf-header.json")
+        if (!res.ok) throw new Error("header sprite metadata unavailable")
+        const data = await res.json() as {
+          frames?: Record<string, { frame?: { x: number; y: number; w: number; h: number }; duration?: number }>
+        }
+        if (cancelled) return
+
+        const parsedFrames = Object.entries(data.frames ?? {})
+          .sort(([a], [b]) => {
+            const an = Number((a.match(/\d+/)?.[0] ?? "0"))
+            const bn = Number((b.match(/\d+/)?.[0] ?? "0"))
+            return an - bn
+          })
+          .map(([, value]) => ({
+            x: value.frame?.x ?? 0,
+            y: value.frame?.y ?? 0,
+            w: value.frame?.w ?? 768,
+            h: value.frame?.h ?? 16,
+            duration: value.duration ?? 100,
+          }))
+
+        setFrames(parsedFrames)
+
+        const img = new Image()
+        img.onload = () => {
+          if (cancelled) return
+          setSpriteImage(img)
+        }
+        img.src = "/sprites/buizel-surf-header.png"
+      } catch {
+        setFrames([])
+      }
+    }
+
+    loadSprite()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (trigger <= 0 || frames.length === 0) return
+    setFrameIndex(0)
+    setActive(true)
+  }, [trigger, frames])
+
+  useEffect(() => {
+    if (!active || frames.length === 0) return
+
+    const duration = Math.max(30, Math.floor((frames[frameIndex]?.duration ?? 100) * 1.2))
+    const timer = setTimeout(() => {
+      setFrameIndex((prev) => {
+        const next = prev + 1
+        if (next >= frames.length) {
+          setActive(false)
+          return 0
+        }
+        return next
+      })
+    }, duration)
+
+    return () => clearTimeout(timer)
+  }, [active, frameIndex, frames])
+
+  useEffect(() => {
+    if (!canvasRef.current) return
+    const ctx = canvasRef.current.getContext("2d")
+    if (!ctx) return
+
+    if (!active || !spriteImage || frames.length === 0) {
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+      return
+    }
+
+    const frame = frames[frameIndex] ?? frames[0]
+    if (canvasRef.current.width !== frame.w || canvasRef.current.height !== frame.h) {
+      canvasRef.current.width = frame.w
+      canvasRef.current.height = frame.h
+    }
+    ctx.clearRect(0, 0, frame.w, frame.h)
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(spriteImage, frame.x, frame.y, frame.w, frame.h, 0, 0, frame.w, frame.h)
+  }, [active, spriteImage, frames, frameIndex])
+
+  if (frames.length === 0) return null
+
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10, display: "flex", alignItems: "stretch" }}>
+      <canvas
+        ref={canvasRef}
+        width={frames[0].w}
+        height={frames[0].h}
+        style={{
+          height: "100%",
+          width: "auto",
+          imageRendering: "pixelated",
+          opacity: active ? 1 : 0,
+          transition: "opacity 120ms linear",
+        }}
+      />
+    </div>
+  )
+}
+
+function TopbarAnimatedLogo({ onActivate }: { onActivate: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [spriteImage, setSpriteImage] = useState<HTMLImageElement | null>(null)
   const [frames, setFrames] = useState<SpriteFrame[]>([])
@@ -1299,7 +1417,7 @@ function TopbarAnimatedLogo() {
   }, [spriteImage, frames, frameIndex])
 
   if (!spriteImage || frames.length === 0) {
-    return <img src="/favicon.png" alt="icon" style={{ width: 40, height: 40, imageRendering: "pixelated" }} />
+    return <img src="/favicon.png" alt="icon" onClick={onActivate} style={{ width: 40, height: 40, imageRendering: "pixelated", cursor: "pointer" }} />
   }
 
   return (
@@ -1309,8 +1427,9 @@ function TopbarAnimatedLogo() {
       height={32}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={onActivate}
       aria-label="logo"
-      style={{ width: 40, height: 40, imageRendering: "pixelated", display: "block" }}
+      style={{ width: 40, height: 40, imageRendering: "pixelated", display: "block", cursor: "pointer" }}
     />
   )
 }
