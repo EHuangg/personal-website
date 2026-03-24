@@ -5,8 +5,11 @@ export const metadata: Metadata = {
   title: "Evan Maps",
   description: "Evan Huang — Mathematics graduate, software developer, network engineer.",
   icons: {
-    icon: "/favicon.png",
-    apple: "/favicon.png",
+    icon: [
+      { url: "/favicon.png?v=2", type: "image/png" },
+      { url: "/favicon.ico?v=2", rel: "shortcut icon" },
+    ],
+    apple: "/favicon.png?v=2",
   },
 }
 

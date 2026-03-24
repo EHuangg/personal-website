@@ -366,8 +366,7 @@ export default function FindEvan() {
       if (next) {
         const pin = PINS.find((p) => p.id === id)!
         mapRef.current?.flyTo({ center: [pin.lng, pin.lat], zoom: pin.zoom, duration: 1200, essential: true })
-        if (id !== "projects") setExpandedPin(id)
-        else setExpandedPin(null)
+        setExpandedPin(id)
       } else {
         setExpandedPin(null)
         const prev_pin = PINS.find((p) => p.id === id)!
@@ -932,7 +931,7 @@ export default function FindEvan() {
   return (
     <div className="app">
       <div className="topbar">
-        <img src="/favicon.png" alt="icon" style={{ width: 24, height: 24, imageRendering: "pixelated" }} />
+        <img src="/favicon.png" alt="icon" style={{ width: 40, height: 40, imageRendering: "pixelated" }} />
         <span className="topbar-title">Evan Maps</span>
         <span className="topbar-subtitle">evan-huang.dev</span>
       </div>
@@ -1032,7 +1031,6 @@ export default function FindEvan() {
               {PINS.filter(p => p.id === "projects").map(pin => (
                 <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
               ))}
-              {activePin === "projects" && <ProjectsDetail />}
             </div>
             <Clock />
             <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
