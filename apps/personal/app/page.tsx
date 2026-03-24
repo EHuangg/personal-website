@@ -28,6 +28,14 @@ type RouteSuggestion = {
   center: [number, number]
 }
 
+type SpriteFrame = {
+  x: number
+  y: number
+  w: number
+  h: number
+  duration: number
+}
+
 const PINS: Pin[] = [
   { id: "evan",       label: "Evan Huang",             sub: "Oakville, ON",                           icon: "🏠", emoji: "👤", iconBg: "#8fc4e8", lng: -79.6877,           lat: 43.4675,           zoom: 13 },
   { id: "uow",        label: "University of Waterloo", sub: "Waterloo, ON · B.Sc. Mathematics",        icon: "🎓", emoji: "🎓", iconBg: "#f6c98f", lng: -80.5448,           lat: 43.4723,           zoom: 15 },
@@ -931,7 +939,7 @@ export default function FindEvan() {
   return (
     <div className="app">
       <div className="topbar">
-        <img src="/favicon.png" alt="icon" style={{ width: 40, height: 40, imageRendering: "pixelated" }} />
+        <TopbarAnimatedLogo />
         <span className="topbar-title">Evan Maps</span>
         <span className="topbar-subtitle">evan-huang.dev</span>
       </div>
@@ -1212,6 +1220,98 @@ export default function FindEvan() {
         </>
       )}
     </div>
+  )
+}
+
+function TopbarAnimatedLogo() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [spriteImage, setSpriteImage] = useState<HTMLImageElement | null>(null)
+  const [frames, setFrames] = useState<SpriteFrame[]>([])
+  const [frameIndex, setFrameIndex] = useState(0)
+  const [hovered, setHovered] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSprite = async () => {
+      try {
+        const res = await fetch("/sprites/buizel-logo.json")
+        if (!res.ok) throw new Error("sprite metadata unavailable")
+        const data = await res.json() as {
+          frames?: Record<string, { frame?: { x: number; y: number; w: number; h: number }; duration?: number }>
+        }
+        if (cancelled) return
+
+        const parsedFrames = Object.entries(data.frames ?? {})
+          .sort(([a], [b]) => {
+            const an = Number((a.match(/\d+/)?.[0] ?? "0"))
+            const bn = Number((b.match(/\d+/)?.[0] ?? "0"))
+            return an - bn
+          })
+          .map(([, value]) => ({
+            x: value.frame?.x ?? 0,
+            y: value.frame?.y ?? 0,
+            w: value.frame?.w ?? 32,
+            h: value.frame?.h ?? 32,
+            duration: value.duration ?? 100,
+          }))
+
+        setFrames(parsedFrames)
+
+        const img = new Image()
+        img.onload = () => {
+          if (cancelled) return
+          setSpriteImage(img)
+        }
+        img.src = "/sprites/buizel-logo.png"
+      } catch {
+        setFrames([])
+      }
+    }
+
+    loadSprite()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!hovered || frames.length === 0) {
+      setFrameIndex(0)
+      return
+    }
+
+    const duration = Math.max(20, Math.floor((frames[frameIndex]?.duration ?? 100) / 2))
+    const timer = setTimeout(() => {
+      setFrameIndex((prev) => (prev + 1) % frames.length)
+    }, duration)
+
+    return () => clearTimeout(timer)
+  }, [hovered, frameIndex, frames])
+
+  useEffect(() => {
+    if (!canvasRef.current || !spriteImage || frames.length === 0) return
+    const ctx = canvasRef.current.getContext("2d")
+    if (!ctx) return
+
+    const frame = frames[frameIndex] ?? frames[0]
+    ctx.clearRect(0, 0, 32, 32)
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(spriteImage, frame.x, frame.y, frame.w, frame.h, 0, 0, 32, 32)
+  }, [spriteImage, frames, frameIndex])
+
+  if (!spriteImage || frames.length === 0) {
+    return <img src="/favicon.png" alt="icon" style={{ width: 40, height: 40, imageRendering: "pixelated" }} />
+  }
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={32}
+      height={32}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      aria-label="logo"
+      style={{ width: 40, height: 40, imageRendering: "pixelated", display: "block" }}
+    />
   )
 }
 
