@@ -39,6 +39,12 @@ export const siteConfig = {
       tags: ["Next.js", "TypeScript", "PostgreSQL"],
     },
     {
+      name: "Server Monitor",
+      description: "Public facing monitoring dashboard for my homeserver.",
+      url: "https://server.evan-huang.dev",
+      tags: ["threeJS", "animeJS", "TypeScript", "Python", "Linux"],
+    },
+    {
       name: "Live Subtitles",
       description: "Desktop captioning app with per-application audio splitting and local speech-to-text.",
       url: "https://github.com/EHuangg/Live-Subtitles",

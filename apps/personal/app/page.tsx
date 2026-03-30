@@ -1228,11 +1228,11 @@ export default function FindEvan() {
 }
 
 function TopbarSurfAnimation({ trigger }: { trigger: number }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [spriteImage, setSpriteImage] = useState<HTMLImageElement | null>(null)
   const [frames, setFrames] = useState<SpriteFrame[]>([])
-  const [frameIndex, setFrameIndex] = useState(0)
-  const [active, setActive] = useState(false)
+  const [runs, setRuns] = useState<number[]>([])
+  const nextRunIdRef = useRef(1)
+  const lastTriggerRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
@@ -1278,38 +1278,70 @@ function TopbarSurfAnimation({ trigger }: { trigger: number }) {
   }, [])
 
   useEffect(() => {
-    if (trigger <= 0 || frames.length === 0) return
-    setFrameIndex(0)
-    setActive(true)
+    if (frames.length === 0 || trigger <= lastTriggerRef.current) return
+
+    const spawnCount = trigger - lastTriggerRef.current
+    lastTriggerRef.current = trigger
+
+    setRuns((prev) => {
+      const spawned = Array.from({ length: spawnCount }, () => nextRunIdRef.current++)
+      return [...prev, ...spawned]
+    })
   }, [trigger, frames])
 
+  if (frames.length === 0 || !spriteImage) return null
+
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10, display: "flex", alignItems: "stretch" }}>
+      {runs.map((runId) => (
+        <TopbarSurfAnimationRun
+          key={runId}
+          frames={frames}
+          spriteImage={spriteImage}
+          onDone={() => setRuns((prev) => prev.filter((id) => id !== runId))}
+        />
+      ))}
+    </div>
+  )
+}
+
+function TopbarSurfAnimationRun({
+  frames,
+  spriteImage,
+  onDone,
+}: {
+  frames: SpriteFrame[]
+  spriteImage: HTMLImageElement
+  onDone: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [frameIndex, setFrameIndex] = useState(0)
+  const [finished, setFinished] = useState(false)
+
   useEffect(() => {
-    if (!active || frames.length === 0) return
+    if (frames.length === 0 || finished) return
 
     const duration = Math.max(30, Math.floor((frames[frameIndex]?.duration ?? 100) * 1.2))
     const timer = setTimeout(() => {
-      setFrameIndex((prev) => {
-        const next = prev + 1
-        if (next >= frames.length) {
-          setActive(false)
-          return 0
-        }
-        return next
-      })
+      if (frameIndex + 1 >= frames.length) {
+        setFinished(true)
+        return
+      }
+      setFrameIndex((prev) => prev + 1)
     }, duration)
 
     return () => clearTimeout(timer)
-  }, [active, frameIndex, frames])
+  }, [frameIndex, frames, finished])
+
+  useEffect(() => {
+    if (!finished) return
+    onDone()
+  }, [finished, onDone])
 
   useEffect(() => {
     if (!canvasRef.current) return
     const ctx = canvasRef.current.getContext("2d")
     if (!ctx) return
-
-    if (!active || !spriteImage || frames.length === 0) {
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
-      return
-    }
 
     const frame = frames[frameIndex] ?? frames[0]
     if (canvasRef.current.width !== frame.w || canvasRef.current.height !== frame.h) {
@@ -1319,9 +1351,7 @@ function TopbarSurfAnimation({ trigger }: { trigger: number }) {
     ctx.clearRect(0, 0, frame.w, frame.h)
     ctx.imageSmoothingEnabled = false
     ctx.drawImage(spriteImage, frame.x, frame.y, frame.w, frame.h, 0, 0, frame.w, frame.h)
-  }, [active, spriteImage, frames, frameIndex])
-
-  if (frames.length === 0) return null
+  }, [spriteImage, frames, frameIndex])
 
   return (
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10, display: "flex", alignItems: "stretch" }}>
@@ -1333,8 +1363,7 @@ function TopbarSurfAnimation({ trigger }: { trigger: number }) {
           height: "100%",
           width: "auto",
           imageRendering: "pixelated",
-          opacity: active ? 1 : 0,
-          transition: "opacity 120ms linear",
+          opacity: 1,
         }}
       />
     </div>
@@ -1447,7 +1476,18 @@ function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", overflow: "hidden", flexShrink: 0, background: pin.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45 }}>
       {!err ? (
-        <img src={`/pins/${pin.id}.jpg`} alt={pin.label} onError={() => setErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img
+          src={`/pins/${pin.id}.jpg`}
+          alt={pin.label}
+          onError={() => setErr(true)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+            filter: pin.id === "projects" ? "grayscale(1) contrast(1.45)" : undefined,
+          }}
+        />
       ) : (
         <span>{pin.emoji}</span>
       )}
