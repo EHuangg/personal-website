@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "Evan Huang",
-  bio: `Hi! I’m Evan. I am a Canadian newgrad based near Toronto. I enjoy building software, understanding how systems work, and solving technical problems from the ground up. 
+  bio: `Hi! I’m Evan. I am a Canadian new grad based near Toronto. I enjoy building software, understanding how systems work, and solving technical problems from the ground up. 
 
 Outside of tech, I’m also into basketball, soccer, and art.`,
   links: {

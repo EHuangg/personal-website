@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type CSSProperties } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { siteConfig } from "@personal-website/shared"
 
@@ -116,71 +116,10 @@ function ProjectsDetail() {
   )
 }
 
-function AnimatedBioWord({ word, variant }: { word: string; variant: "basketball" | "soccer" }) {
-  const letters = word.split("")
-  const [coloredCount, setColoredCount] = useState(0)
-  const timersRef = useRef<number[]>([])
-
-  useEffect(() => {
-    return () => {
-      timersRef.current.forEach((timer) => window.clearTimeout(timer))
-    }
-  }, [])
-
-  const runAnimation = () => {
-    timersRef.current.forEach((timer) => window.clearTimeout(timer))
-    timersRef.current = []
-    setColoredCount(0)
-
-    const stepMs = 90
-    const holdMs = 3000
-
-    letters.forEach((_, index) => {
-      const timer = window.setTimeout(() => {
-        setColoredCount(index + 1)
-      }, (index + 1) * stepMs)
-      timersRef.current.push(timer)
-    })
-
-    const exitStart = letters.length * stepMs + holdMs
-
-    letters.forEach((_, index) => {
-      const timer = window.setTimeout(() => {
-        setColoredCount(letters.length - index - 1)
-      }, exitStart + (index + 1) * stepMs)
-      timersRef.current.push(timer)
-    })
-  }
-
-  return (
-    <button
-      type="button"
-      className="bio-word-button"
-      onClick={runAnimation}
-      aria-label={`Animate ${word}`}
-    >
-      {letters.map((letter, index) => (
-        <span
-          key={`${word}-${index}`}
-          className={`bio-word-letter ${index < coloredCount ? `bio-word-letter--${variant}` : ""}`}
-          style={{ ["--letter-index" as "--letter-index"]: index } as CSSProperties}
-        >
-          {letter}
-        </span>
-      ))}
-    </button>
-  )
-}
-
 function EvanDetail() {
   return (
     <div className="pin-detail">
-      <p className="pin-detail-bio">
-        Hi! I’m Evan. I am a Canadian newgrad based near Toronto. I enjoy building software, understanding how systems work, and solving technical problems from the ground up.
-      </p>
-      <p className="pin-detail-bio">
-        Outside of tech, I’m also into <AnimatedBioWord word="basketball" variant="basketball" />, <AnimatedBioWord word="soccer" variant="soccer" />, and art.
-      </p>
+      <p className="pin-detail-bio">{siteConfig.bio}</p>
     </div>
   )
 }
@@ -482,7 +421,7 @@ export default function FindEvan() {
       }
 
       if (!destination) {
-        setRouteStatus("no drivable route, maybe he'll take a plane instead")
+        setRouteStatus("destination not found")
         return
       }
 
@@ -495,7 +434,7 @@ export default function FindEvan() {
       const route = directionsData.routes?.[0]
       const coords = route?.geometry?.coordinates
       if (!route || !coords || coords.length < 2) {
-        setRouteStatus("no drivable route, maybe he'll take a plane instead")
+        setRouteStatus("no drivable route found")
         return
       }
 
@@ -520,9 +459,9 @@ export default function FindEvan() {
 
       const km = (route.distance ?? 0) / 1000
       const mins = Math.round((route.duration ?? 0) / 60)
-      setRouteStatus(`He'll drive ${km.toFixed(1)} km · ${mins} min to your office in ${placeName}`)
+      setRouteStatus(`${km.toFixed(1)} km · ${mins} min to ${placeName}`)
     } catch {
-      setRouteStatus("no drivable route, maybe he'll take a plane instead")
+      setRouteStatus("route unavailable right now")
     } finally {
       setRouting(false)
     }
@@ -1043,7 +982,7 @@ export default function FindEvan() {
                         <PinAvatar pin={expandedPinData} size={48} />
                         <div>
                           <div className="hero-name">{expandedPinData.label}</div>
-                          {expandedPinData.id !== "projects" && <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>}
+                          <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
                         </div>
                       </div>
                     )}
@@ -1131,7 +1070,7 @@ export default function FindEvan() {
                   setSelectedSuggestion(null)
                 }}
                 onFocus={() => setShowSuggestions(routeSuggestions.length > 0)}
-                placeholder="Evan is open to relocating to ..."
+                placeholder="Route from Evan to..."
                 autoComplete="off"
                 style={{
                   flex: 1,
@@ -1158,7 +1097,7 @@ export default function FindEvan() {
                   cursor: routing ? "not-allowed" : "pointer",
                 }}
               >
-                {routing ? "..." : "search"}
+                {routing ? "..." : "route"}
               </button>
               {hasRoute && (
                 <button
@@ -1270,7 +1209,7 @@ export default function FindEvan() {
                     <PinAvatar pin={expandedPinData} size={48} />
                     <div>
                       <div className="hero-name">{expandedPinData.label}</div>
-                      {expandedPinData.id !== "projects" && <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>}
+                      <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
                     </div>
                   </div>
                 )}
@@ -1537,18 +1476,7 @@ function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
   return (
     <div style={{ width: size, height: size, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", overflow: "hidden", flexShrink: 0, background: pin.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45 }}>
       {!err ? (
-        <img
-          src={`/pins/${pin.id}.jpg`}
-          alt={pin.label}
-          onError={() => setErr(true)}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-            filter: pin.id === "projects" ? "grayscale(1) contrast(1.45)" : undefined,
-          }}
-        />
+        <img src={`/pins/${pin.id}.jpg`} alt={pin.label} onError={() => setErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       ) : (
         <span>{pin.emoji}</span>
       )}
@@ -1557,34 +1485,22 @@ function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
 }
 
 function PinRow({ pin, active, onClick, role, date }: { pin: Pin; active: boolean; onClick: () => void; role?: string; date?: string }) {
-  const displayName =
-    pin.id === "projects"
-      ? `Projects (${siteConfig.projects.length})`
-      : pin.id === "evan"
-        ? `${pin.label} 🇨🇦`
-        : pin.label
-  const showSub = pin.id !== "projects" || pin.id === "projects"
-  const subContent = pin.id === "projects"
-    ? "Click to View"
-    : pin.notFound
-      ? (
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
-          Location not found
-        </span>
-      )
-      : role ?? pin.sub
   return (
     <div className={`pin-card ${active ? "pin-card--active" : ""}`} onClick={onClick}>
       <PinAvatar pin={pin} size={36} />
       <div className="pin-card-body">
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
-          <div className="pin-card-name" style={{ flexShrink: 0 }}>{displayName}</div>
+          <div className="pin-card-name" style={{ flexShrink: 0 }}>{pin.label}</div>
           {date && <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--ink-muted)", whiteSpace: "nowrap" }}>{date}</span>}
         </div>
-        {showSub && <div className="pin-card-sub">
-          {subContent}
-        </div>}
+        <div className="pin-card-sub">
+          {pin.notFound ? (
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
+              Location not found
+            </span>
+          ) : role ?? pin.sub}
+        </div>
       </div>
       <span className="pin-chevron">›</span>
     </div>
