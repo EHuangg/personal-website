@@ -145,7 +145,24 @@ html, body { height: 100%; overflow: hidden; font-family: var(--font-sans); }
   border-bottom: 0.5px solid var(--ink-faint);
   border-left: 3px solid var(--blue);
 }
-.pin-detail-bio { font-size: 0.78rem; color: var(--ink-light); line-height: 1.7; margin-bottom: 0.5rem; }
+.pin-detail-bio { font-size: 0.88rem; color: var(--ink-light); line-height: 1.7; margin-bottom: 0.5rem; white-space: pre-wrap; }
+.bio-word-button {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+.bio-word-letter {
+  display: inline-block;
+  transition: color 180ms ease;
+}
+.bio-word-letter--basketball { color: #de8f8f; }
+.bio-word-letter--soccer { color: #8faee8; }
 .pin-detail-meta { font-size: 0.7rem; color: var(--ink-muted); font-family: var(--font-mono); margin-bottom: 0.4rem; }
 .pin-detail-points { list-style: none; margin: 0.4rem 0; }
 .pin-detail-points li {
