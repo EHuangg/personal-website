@@ -482,7 +482,7 @@ export default function FindEvan() {
       }
 
       if (!destination) {
-        setRouteStatus("destination not found")
+        setRouteStatus("no drivable route, maybe he'll take a plane instead")
         return
       }
 
@@ -520,9 +520,9 @@ export default function FindEvan() {
 
       const km = (route.distance ?? 0) / 1000
       const mins = Math.round((route.duration ?? 0) / 60)
-      setRouteStatus(`${km.toFixed(1)} km · ${mins} min to ${placeName}`)
+      setRouteStatus(`He'll drive ${km.toFixed(1)} km · ${mins} min to your office in ${placeName}`)
     } catch {
-      setRouteStatus("route unavailable right now")
+      setRouteStatus("no drivable route, maybe he'll take a plane instead")
     } finally {
       setRouting(false)
     }
@@ -1158,7 +1158,7 @@ export default function FindEvan() {
                   cursor: routing ? "not-allowed" : "pointer",
                 }}
               >
-                {routing ? "..." : "route"}
+                {routing ? "..." : "search"}
               </button>
               {hasRoute && (
                 <button
