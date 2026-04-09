@@ -41,7 +41,7 @@ const PINS: Pin[] = [
   { id: "uow",        label: "University of Waterloo", sub: "Waterloo, ON · B.Sc. Mathematics",        icon: "🎓", emoji: "🎓", iconBg: "#f6c98f", lng: -80.5448,           lat: 43.4723,           zoom: 15 },
   { id: "blackberry", label: "BlackBerry",             sub: "Waterloo, ON · Network Engineer Intern",  icon: "💼", emoji: "🫐", iconBg: "#a8d5ba", lng: -80.5134953274364,  lat: 43.517182158766694, zoom: 15 },
   { id: "compugen",   label: "Compugen Inc.",          sub: "Richmond Hill, ON · Network Ops Intern",  icon: "💼", emoji: "🖥",  iconBg: "#a8d5ba", lng: -79.38721826149013, lat: 43.88987797031746,  zoom: 14 },
-  { id: "projects",   label: "Projects",               sub: "Location not found",                     icon: "📁", emoji: "⚡", iconBg: "#b8b1a4", lng: -150.0,             lat: 20.0,              zoom: 4, notFound: true },
+  { id: "projects",   label: "Projects",               sub: "",                     icon: "📁", emoji: "⚡", iconBg: "#b8b1a4", lng: -150.0,             lat: 20.0,              zoom: 4, notFound: true },
 ]
 
 ////// Courses //////////////////////////////////
@@ -1497,7 +1497,7 @@ function PinRow({ pin, active, onClick, role, date }: { pin: Pin; active: boolea
           {pin.notFound ? (
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
-              Location not found
+              
             </span>
           ) : role ?? pin.sub}
         </div>
