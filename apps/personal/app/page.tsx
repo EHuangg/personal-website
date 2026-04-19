@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useEffect, useRef, useCallback } from "react"
+import { useEffect, useRef, useCallback, useState } from "react"
 import { siteConfig } from "@personal-website/shared"
 import Link from "next/link"
 import gsap from "gsap"
@@ -195,6 +195,8 @@ function shade(i: number, base: number): string {
 type NavItem = {
   tiles: { spokeI: number; ringR: number }[]
   label: string; href: string; rot: number; external?: boolean; icon?: string
+  labelPos?: Pt
+  edgePts?: [Pt, Pt] // two SVG-space points; rotation computed at runtime for viewport aspect ratio
 }
 const NAV_ITEMS: NavItem[] = [
   { tiles: [{ spokeI: 2, ringR: 3 }],  label: "ABOUT",      href: "/about",      rot: -5  },
@@ -202,7 +204,13 @@ const NAV_ITEMS: NavItem[] = [
   { tiles: [{ spokeI: 15, ringR: 2 }], label: "EXPERIENCE", href: "/experience", rot: -4  },
   { tiles: [{ spokeI: 5, ringR: 2 }],  label: "PIXEL ART",  href: "/pixel-art",  rot: -9  },
   // CTA links — right side, outermost ring band
-  { tiles: [{ spokeI: 6, ringR: 3 }],  label: "LINKEDIN", href: siteConfig.links.linkedin, rot: 3,  external: true, icon: "/icons/linkedin_logo.png" },
+  // LinkedIn: icon tilted extra -10deg, label shifted inward so text is on screen
+  { tiles: [{ spokeI: 6, ringR: 3 }],  label: "LINKEDIN", href: siteConfig.links.linkedin,
+    rot: 0, // overridden at runtime via edgePts
+    external: true, icon: "/icons/linkedin_logo.svg",
+    labelPos: [EDGE[6][0] * 0.25 + EDGE[nx(6)][0] * 0.25 + RING3[6][0] * 0.25 + RING3[nx(6)][0] * 0.25,
+              EDGE[6][1] * 0.25 + EDGE[nx(6)][1] * 0.25 + RING3[6][1] * 0.25 + RING3[nx(6)][1] * 0.25] as Pt,
+    edgePts: [EDGE[6], EDGE[nx(6)]] },
   { tiles: [{ spokeI: 7, ringR: 3 }], label: "GITHUB",   href: siteConfig.links.github,   rot: -6, external: true },
   { tiles: [{ spokeI: 8, ringR: 3 }], label: "RESUME",   href: siteConfig.links.resume,   rot: 5,  external: true },
 ]
@@ -308,6 +316,21 @@ export default function Home() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapboxMap | null>(null)
   const mapShardEl = useRef<SVGPolygonElement | null>(null)
+
+  // Compute rotation angles that depend on viewport aspect ratio
+  const [aspect, setAspect] = useState(1)
+  useEffect(() => {
+    const update = () => setAspect(window.innerWidth / window.innerHeight)
+    update()
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
+  }, [])
+  function edgeRot(pts: [Pt, Pt]): number {
+    const dx = (pts[0][0] - pts[1][0]) * aspect
+    const dy = pts[0][1] - pts[1][1]
+    return Math.atan2(dy, dx) * 180 / Math.PI
+  }
+
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.fromTo(".shard-poly",
@@ -527,14 +550,19 @@ export default function Home() {
       </svg>
 
       <div className="nav-overlay-layer">
-        {NAV_ITEMS.map(({ href, label, rot, external, icon }, ni) => {
-          const [cx, cy] = NAV_CENTROIDS[ni]
+        {NAV_ITEMS.map(({ href, label, rot, external, icon, labelPos, edgePts }, ni) => {
+          const [cx, cy] = labelPos ?? NAV_CENTROIDS[ni]
+          const finalRot = edgePts ? -40 : rot
           const tiles = NAV_FLAT.filter(f => f.navIdx === ni)
           const labelEl = (
-            <span className="nav-label" style={{
+            <span className={`nav-label${icon ? " nav-label-with-icon" : ""}`} style={{
               left: `${cx / 10}%`, top: `${cy / 10}%`,
-              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
-            }}>{icon && <img src={icon} alt="" className="nav-label-icon" />}{label}</span>
+              transform: `translate(-50%, -50%) rotate(${finalRot}deg)${label === "LINKEDIN" ? ' translateX(-20%)' : ''}`,
+            }}>{icon && <img src={icon} alt="" className="nav-label-icon" style={label === "LINKEDIN" ? { transform: "rotate(-10deg) translateX(-18%)" } : { transform: "" }} />}
+              {label === "LINKEDIN"
+                ? <span style={{ display: "inline-block", transform: "translate(20%,32%)" }}>{label}</span>
+                : label}
+            </span>
           )
           const handlers = {
             onMouseEnter: () => onEnter(ni),
