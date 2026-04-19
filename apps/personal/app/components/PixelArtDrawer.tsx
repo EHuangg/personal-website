@@ -1,119 +1,93 @@
 "use client"
 
-import { useRef, useState, useCallback, useEffect } from "react"
-import { createPortal } from "react-dom"
+import { useRef, useState, useCallback, useEffect, useMemo } from "react"
 
 const SIZE = 16
-const BASE_CELL = 20
+const BASE_CELL = 10
 
-const PALETTE = [
-  "#000000", "#ffffff", "#ff3b30", "#ff9500", "#ffcc00",
-  "#30b94d", "#0a84ff", "#bf5af2", "#ff2d55", "#8e8e93",
-  "#5ac8fa", "#ff6b35", "#2a2318", "#c8b89a", "#6a5a42", "#f5f0e8",
-]
+const PALETTE = ["#D00000", "#000000", "#FFFFFF"]
 
-export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
+function emptyGrid() {
+  return Array.from({ length: SIZE }, () => Array(SIZE).fill(""))
+}
+
+function cloneGrid(grid: string[][]) {
+  return grid.map((row) => [...row])
+}
+
+function serializeGrid(grid: string[][]) {
+  return grid.map((row) => row.join(",")).join("|")
+}
+
+export default function PixelArtDrawer({ onSubmit, onCancel, initialArt, submitting = false, onDelete, statusMessage, statusTone = "neutral" }: {
   onSubmit: (dataUrl: string) => void
   onCancel: () => void
   initialArt?: string
+  submitting?: boolean
+  onDelete?: () => void
+  statusMessage?: string | null
+  statusTone?: "neutral" | "error" | "success"
 }) {
-  const [grid, setGrid] = useState<string[][]>(() => {
-    if (initialArt) {
-      // Decode existing art into grid
-      const img = new Image()
-      img.src = initialArt
-      // Will be populated via useEffect below
-    }
-    return Array.from({ length: SIZE }, () => Array(SIZE).fill(""))
-  })
-  const [color, setColor] = useState("#0a84ff")
+  const [grid, setGrid] = useState<string[][]>(emptyGrid)
+  const [baselineGrid, setBaselineGrid] = useState<string[][]>(emptyGrid)
+  const [color, setColor] = useState("#D00000")
   const [erasing, setErasing] = useState(false)
   const [drawing, setDrawing] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-  const [cellSize, setCellSize] = useState(BASE_CELL)
-  const [sheetOffsetY, setSheetOffsetY] = useState(0)
+  const [boardPixels, setBoardPixels] = useState(SIZE * BASE_CELL)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const sheetStartYRef = useRef<number | null>(null)
-  const sheetDraggingRef = useRef(false)
-  const sheetCanDragRef = useRef(false)
-  const sheetOffsetRef = useRef(0)
-  const sheetScrollRef = useRef<HTMLDivElement | null>(null)
+  const centerPaneRef = useRef<HTMLDivElement>(null)
 
-  // Load initial art into grid if editing
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)")
-    const sync = () => setIsMobile(mq.matches)
-    sync()
-    mq.addEventListener("change", sync)
-    return () => mq.removeEventListener("change", sync)
+    const centerPane = centerPaneRef.current
+    if (!centerPane) return
+    const recalc = () => {
+      const rect = centerPane.getBoundingClientRect()
+      const next = Math.max(96, Math.floor(Math.min(rect.width, rect.height)))
+      setBoardPixels(next)
+    }
+    recalc()
+    const observer = new ResizeObserver(recalc)
+    observer.observe(centerPane)
+    return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    setSheetOffsetY(0)
-    sheetStartYRef.current = null
-    sheetDraggingRef.current = false
-    sheetCanDragRef.current = false
-    sheetOffsetRef.current = 0
-  }, [isMobile])
-
-  useEffect(() => {
-    if (!isMobile) {
-      setCellSize(BASE_CELL)
-      return
-    }
-
-    const recalc = () => {
-      const vh = window.innerHeight
-      const reservedHeight = 255
-      const fit = Math.floor(((vh * 0.96) - reservedHeight) / SIZE)
-      const next = Math.max(14, Math.min(BASE_CELL, fit))
-      setCellSize(next)
-    }
-
-    recalc()
-    window.addEventListener("resize", recalc)
-    return () => window.removeEventListener("resize", recalc)
-  }, [isMobile])
+  const cellSize = Math.max(7, Math.floor(boardPixels / SIZE))
 
   useEffect(() => {
     if (!initialArt) return
     const img = new Image()
     img.onload = () => {
       const c = document.createElement("canvas")
-      c.width = SIZE; c.height = SIZE
+      c.width = SIZE
+      c.height = SIZE
       const ctx = c.getContext("2d")!
       ctx.drawImage(img, 0, 0, SIZE, SIZE)
-      const newGrid = Array.from({ length: SIZE }, (_, y) =>
+      const loadedGrid = Array.from({ length: SIZE }, (_, y) =>
         Array.from({ length: SIZE }, (_, x) => {
           const d = ctx.getImageData(x, y, 1, 1).data
           if (d[3] === 0) return ""
           return `#${[d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, "0")).join("")}`
-        })
+        }),
       )
-      setGrid(newGrid)
+      setBaselineGrid(loadedGrid)
+      setGrid(cloneGrid(loadedGrid))
     }
     img.src = initialArt
   }, [initialArt])
 
-  // Draw grid to canvas
+  const isDirty = useMemo(() => serializeGrid(grid) !== serializeGrid(baselineGrid), [grid, baselineGrid])
+
   useEffect(() => {
     const c = canvasRef.current
     if (!c) return
     const ctx = c.getContext("2d")!
     ctx.clearRect(0, 0, c.width, c.height)
-
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         const cell = grid[y][x]
-        // Checkerboard bg for empty cells
-        if (!cell) {
-          ctx.fillStyle = (x + y) % 2 === 0 ? "#e8e0d4" : "#d8d0c4"
-        } else {
-          ctx.fillStyle = cell
-        }
+        ctx.fillStyle = cell || "#111111"
         ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize)
-        // Grid line
-        ctx.strokeStyle = "rgba(0,0,0,0.06)"
+        ctx.strokeStyle = "rgba(255,255,255,0.06)"
         ctx.lineWidth = 0.5
         ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize)
       }
@@ -135,7 +109,8 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
 
   const toDataUrl = () => {
     const c = document.createElement("canvas")
-    c.width = SIZE; c.height = SIZE
+    c.width = SIZE
+    c.height = SIZE
     const ctx = c.getContext("2d")!
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
@@ -146,69 +121,59 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
     return c.toDataURL("image/png")
   }
 
-  const clear = () => setGrid(Array.from({ length: SIZE }, () => Array(SIZE).fill("")))
+  const clear = () => setGrid(emptyGrid())
 
-  const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    sheetStartYRef.current = e.touches[0].clientY
-    const target = e.target as HTMLElement
-    const fromGrabber = !!target.closest(".mobile-detail-grabber")
-    sheetCanDragRef.current = fromGrabber
-    sheetDraggingRef.current = sheetCanDragRef.current
-  }, [])
+  const handleCancel = () => {
+    setGrid(cloneGrid(baselineGrid))
+    setErasing(false)
+    onCancel()
+  }
 
-  const handleSheetTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sheetDraggingRef.current || !sheetCanDragRef.current || sheetStartYRef.current === null) return
-    const delta = e.touches[0].clientY - sheetStartYRef.current
-    if (delta <= 0) {
-      setSheetOffsetY(0)
-      sheetOffsetRef.current = 0
-      return
-    }
-    e.preventDefault()
-    const next = Math.min(380, delta)
-    setSheetOffsetY(next)
-    sheetOffsetRef.current = next
-  }, [])
-
-  const handleSheetTouchEnd = useCallback(() => {
-    if (!sheetDraggingRef.current) return
-    sheetDraggingRef.current = false
-    sheetCanDragRef.current = false
-    sheetStartYRef.current = null
-
-    if (sheetOffsetRef.current > 120) {
-      onCancel()
-      return
-    }
-
-    setSheetOffsetY(0)
-    sheetOffsetRef.current = 0
-  }, [onCancel])
-
-  const content = (
-    <>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isMobile ? "0.75rem" : "1rem" }}>
-        <div>
-          <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#2a2318" }}>Leave a sticky</div>
-          <div style={{ fontSize: "0.65rem", color: "#9a8a72", marginTop: 2 }}>draw a 16×16 pixel art pin</div>
-        </div>
-        <button onClick={onCancel} style={{ background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", color: "#9a8a72" }}>✕</button>
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12, padding: 16, background: "#000000" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+        {PALETTE.map((paletteColor) => (
+          <button
+            key={paletteColor}
+            type="button"
+            onClick={() => { setColor(paletteColor); setErasing(false) }}
+            style={{
+              width: 32,
+              height: 32,
+              background: paletteColor,
+              border: color === paletteColor && !erasing ? "3px solid #D00000" : "2px solid rgba(255,255,255,0.2)",
+              cursor: "pointer",
+              outline: color === paletteColor && !erasing ? "2px solid #fff" : "none",
+            }}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() => setErasing((v) => !v)}
+          style={{
+            padding: "6px 12px",
+            background: erasing ? "#D00000" : "transparent",
+            color: "#fff",
+            border: "2px solid #fff",
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.65rem",
+            textTransform: "uppercase",
+            letterSpacing: "0.14em",
+            cursor: "pointer",
+          }}
+        >
+          {erasing ? "ERASING" : "ERASE"}
+        </button>
       </div>
 
-      {/* Canvas */}
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? "0.55rem" : "0.75rem" }}>
+      <div ref={centerPaneRef} style={{ flex: 1, display: "flex", justifyContent: "center", alignItems: "center", minHeight: 0 }}>
         <canvas
           ref={canvasRef}
           width={SIZE * cellSize}
           height={SIZE * cellSize}
           style={{
-            borderRadius: 6,
-            border: "1px solid #c8b89a",
-            backgroundColor: "#e8e0d4",
-            backgroundImage: "linear-gradient(45deg, #e8e0d4 25%, transparent 25%, transparent 75%, #e8e0d4 75%), linear-gradient(45deg, #e8e0d4 25%, transparent 25%, transparent 75%, #e8e0d4 75%)",
-            backgroundPosition: "0 0, 10px 10px",
-            backgroundSize: "20px 20px",
+            border: "2px solid #D00000",
+            backgroundColor: "#111",
             cursor: erasing ? "cell" : "crosshair",
             imageRendering: "pixelated",
             touchAction: "none",
@@ -217,125 +182,35 @@ export default function PixelArtDrawer({ onSubmit, onCancel, initialArt }: {
           onMouseMove={(e) => { if (drawing) paint(e.clientX, e.clientY) }}
           onMouseUp={() => setDrawing(false)}
           onMouseLeave={() => setDrawing(false)}
-          onTouchStart={(e) => {
-            e.preventDefault()
-            setDrawing(true)
-            const t = e.touches[0]
-            paint(t.clientX, t.clientY)
-          }}
-          onTouchMove={(e) => {
-            e.preventDefault()
-            if (!drawing) return
-            const t = e.touches[0]
-            paint(t.clientX, t.clientY)
-          }}
+          onTouchStart={(e) => { e.preventDefault(); setDrawing(true); paint(e.touches[0].clientX, e.touches[0].clientY) }}
+          onTouchMove={(e) => { e.preventDefault(); if (drawing) paint(e.touches[0].clientX, e.touches[0].clientY) }}
           onTouchEnd={() => setDrawing(false)}
           onTouchCancel={() => setDrawing(false)}
         />
       </div>
 
-      {/* Palette */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: isMobile ? "0.45rem" : "0.6rem", justifyContent: "center" }}>
-        {PALETTE.map((c) => (
-          <button
-            key={c}
-            onClick={() => { setColor(c); setErasing(false) }}
-            style={{
-              width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: 4,
-              background: c,
-              border: color === c && !erasing ? "2px solid #2a2318" : "1.5px solid rgba(0,0,0,0.15)",
-              cursor: "pointer",
-              boxShadow: color === c && !erasing ? "0 0 0 1px #f5f0e8 inset" : "none",
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Controls */}
-      <div style={{ display: "flex", gap: 6, marginBottom: isMobile ? "0.6rem" : "0.75rem", justifyContent: "center" }}>
-        <button
-          onClick={() => setErasing((e) => !e)}
-          style={{
-            padding: "4px 10px", borderRadius: 6, fontSize: "0.72rem",
-            background: erasing ? "#2a2318" : "transparent",
-            color: erasing ? "#f5f0e8" : "#6a5a42",
-            border: "1px solid #c8b89a", cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          ✕ erase
+      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <button type="button" onClick={clear} style={{ padding: "8px 16px", background: "transparent", color: "#fff", border: "2px solid rgba(255,255,255,0.2)", fontFamily: "var(--font-display)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer" }}>
+          CLEAR
         </button>
-        <button
-          onClick={clear}
-          style={{
-            padding: "4px 10px", borderRadius: 6, fontSize: "0.72rem",
-            background: "transparent", color: "#6a5a42",
-            border: "1px solid #c8b89a", cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          clear
+        <button type="button" onClick={handleCancel} style={{ padding: "8px 16px", background: "transparent", color: "#fff", border: "2px solid rgba(255,255,255,0.2)", fontFamily: "var(--font-display)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer" }}>
+          CANCEL
+        </button>
+        {onDelete && (
+          <button type="button" onClick={onDelete} style={{ padding: "8px 16px", background: "transparent", color: "#D00000", border: "2px solid #D00000", fontFamily: "var(--font-display)", fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.1em", cursor: "pointer" }}>
+            DELETE
+          </button>
+        )}
+        <button type="button" onClick={() => onSubmit(toDataUrl())} disabled={!isDirty || submitting} style={{ padding: "8px 20px", background: !isDirty || submitting ? "rgba(255,255,255,0.1)" : "#D00000", color: "#fff", border: "none", fontFamily: "var(--font-display)", fontSize: "0.8rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", cursor: !isDirty || submitting ? "not-allowed" : "pointer" }}>
+          {submitting ? "SAVING..." : "SAVE"}
         </button>
       </div>
 
-      {/* Submit */}
-      <button
-        onClick={() => onSubmit(toDataUrl())}
-        style={{
-          width: "100%", padding: "0.6rem",
-          background: "#0a84ff", color: "white",
-          border: "none", borderRadius: 8,
-          fontSize: "0.82rem", fontWeight: 600,
-          cursor: "pointer", fontFamily: "inherit",
-          letterSpacing: "0.02em",
-        }}
-      >
-        Pin it →
-      </button>
-    </>
-  )
-
-  if (isMobile) {
-    if (typeof document === "undefined") return null
-    return createPortal((
-      <>
-        <div className="mobile-detail-backdrop" onClick={onCancel} style={{ zIndex: 1000 }} />
-        <div
-          className={`mobile-detail-sheet mobile-detail-sheet--drawer ${sheetDraggingRef.current ? "dragging" : ""}`}
-          style={{ transform: `translateY(${sheetOffsetY}px)`, zIndex: 1001 }}
-          onTouchStart={handleSheetTouchStart}
-          onTouchMove={handleSheetTouchMove}
-          onTouchEnd={handleSheetTouchEnd}
-          onTouchCancel={handleSheetTouchEnd}
-        >
-          <div className="mobile-detail-grabber" />
-          <div className="sidebar-scroll" ref={sheetScrollRef} style={{ padding: "0.15rem 0.9rem calc(0.8rem + env(safe-area-inset-bottom, 0))" }}>
-            {content}
-          </div>
+      {statusMessage && (
+        <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "0.65rem", letterSpacing: "0.12em", color: statusTone === "error" ? "#D00000" : statusTone === "success" ? "#fff" : "rgba(255,255,255,0.5)" }}>
+          {statusMessage}
         </div>
-      </>
-    ), document.body)
-  }
-
-  if (typeof document === "undefined") return null
-  return createPortal((
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.5)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }} onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
-      <div style={{
-        background: "#f5f0e8",
-        borderRadius: 16,
-        padding: "1.25rem",
-        width: "min(380px, 92vw)",
-        maxHeight: "90vh",
-        overflowY: "auto",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
-        fontFamily: "'IBM Plex Mono', monospace",
-      }}>
-        {content}
-      </div>
+      )}
     </div>
-  ), document.body)
+  )
 }

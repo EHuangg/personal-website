@@ -30,9 +30,17 @@ function getFallbackDeviceId(req: NextRequest): string {
   return `${ua}|${chUa}|${chMobile}|${chPlatform}|${lang}`
 }
 
-// GET — fetch all pins
-export async function GET() {
-  const res = await sbFetch("/visitor_pins?select=id,lat,lng,pixel_art,created_at&order=created_at.asc")
+// GET — fetch all pins, or only current device pin when device_id is provided.
+export async function GET(req: NextRequest) {
+  const deviceId = req.nextUrl.searchParams.get("device_id")
+
+  let path = "/visitor_pins?select=id,lat,lng,pixel_art,created_at&order=created_at.asc"
+  if (deviceId) {
+    const ownerHash = getDeviceHash(deviceId)
+    path = `/visitor_pins?select=id,lat,lng,pixel_art,created_at&ip_hash=eq.${ownerHash}&order=created_at.asc`
+  }
+
+  const res = await sbFetch(path)
   const data = await res.json()
   return NextResponse.json(data)
 }
@@ -75,8 +83,23 @@ export async function POST(req: NextRequest) {
 
 // DELETE — remove own pin by ID
 export async function DELETE(req: NextRequest) {
-  const { id } = await req.json().catch(() => ({ id: null }))
+  const { id, device_id } = await req.json().catch(() => ({ id: null, device_id: null }))
   if (!id) return NextResponse.json({ error: "Missing pin ID" }, { status: 400 })
+
+  const cookieDeviceId = req.cookies.get("visitor_device_id")?.value
+  const rawDeviceId = (typeof device_id === "string" && device_id.trim()) || cookieDeviceId || getFallbackDeviceId(req)
+  const ownerHash = getDeviceHash(rawDeviceId)
+
+  const ownershipRes = await sbFetch(`/visitor_pins?id=eq.${id}&select=id,ip_hash&limit=1`)
+  const ownershipData = await ownershipRes.json().catch(() => [])
+  const pinRecord = Array.isArray(ownershipData) ? ownershipData[0] : null
+
+  if (!pinRecord) {
+    return NextResponse.json({ error: "Pin not found." }, { status: 404 })
+  }
+  if (pinRecord.ip_hash !== ownerHash) {
+    return NextResponse.json({ error: "You can only delete your own pin." }, { status: 403 })
+  }
 
   console.log("[visitor-pins] DELETE id:", id)
   const res = await sbFetch(`/visitor_pins?id=eq.${id}`, {

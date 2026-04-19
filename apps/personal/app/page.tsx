@@ -1,1508 +1,589 @@
-"use client"
+﻿"use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import dynamic from "next/dynamic"
+import { useEffect, useRef, useCallback } from "react"
 import { siteConfig } from "@personal-website/shared"
+import Link from "next/link"
+import gsap from "gsap"
 
-const VisitorFooter = dynamic(() => import("./components/VisitorFooter"), { ssr: false })
+type Pt = [number, number]
 
-////// Types //////////////////////////////////
+const CX = 500, CY = 470
 
-type PinId = "evan" | "uow" | "blackberry" | "compugen" | "projects"
-
-type Pin = {
-  id: PinId
-  label: string
-  sub: string
-  icon: string
-  emoji: string
-  iconBg: string
-  lng: number
-  lat: number
-  zoom: number
-  notFound?: boolean
+function H(s: number): number {
+  const v = Math.sin(s * 127.1 + 311.7) * 43758.5453
+  return v - Math.floor(v)
 }
 
-type RouteSuggestion = {
-  name: string
-  center: [number, number]
+function curvedPath(a: Pt, b: Pt, seed: number, bend: number): string {
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const len = Math.sqrt(dx * dx + dy * dy) || 1
+  const nx = -dy / len, ny = dx / len
+  const offset = (H(seed) - 0.5) * 2 * bend
+  return `M${a[0]},${a[1]} Q${Math.round(mx + nx * offset)},${Math.round(my + ny * offset)} ${b[0]},${b[1]}`
 }
 
-type SpriteFrame = {
-  x: number
-  y: number
-  w: number
-  h: number
-  duration: number
+function multiCurve(points: Pt[], seed: number, bend: number): string {
+  let d = `M${points[0][0]},${points[0][1]}`
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1], cur = points[i]
+    const mx = (prev[0] + cur[0]) / 2, my = (prev[1] + cur[1]) / 2
+    const dx = cur[0] - prev[0], dy = cur[1] - prev[1]
+    const len = Math.sqrt(dx * dx + dy * dy) || 1
+    const nx = -dy / len, ny = dx / len
+    const offset = (H(seed + i * 73) - 0.5) * 2 * bend
+    d += ` Q${Math.round(mx + nx * offset)},${Math.round(my + ny * offset)} ${cur[0]},${cur[1]}`
+  }
+  return d
 }
 
-const PINS: Pin[] = [
-  { id: "evan",       label: "Evan Huang",             sub: "Oakville, ON",                           icon: "🏠", emoji: "👤", iconBg: "#8fc4e8", lng: -79.6877,           lat: 43.4675,           zoom: 13 },
-  { id: "uow",        label: "University of Waterloo", sub: "Waterloo, ON · B.Sc. Mathematics",        icon: "🎓", emoji: "🎓", iconBg: "#f6c98f", lng: -80.5448,           lat: 43.4723,           zoom: 15 },
-  { id: "blackberry", label: "BlackBerry",             sub: "Waterloo, ON · Network Engineer Intern",  icon: "💼", emoji: "🫐", iconBg: "#a8d5ba", lng: -80.5134953274364,  lat: 43.517182158766694, zoom: 15 },
-  { id: "compugen",   label: "Compugen Inc.",          sub: "Richmond Hill, ON · Network Ops Intern",  icon: "💼", emoji: "🖥",  iconBg: "#a8d5ba", lng: -79.38721826149013, lat: 43.88987797031746,  zoom: 14 },
-  { id: "projects",   label: "Projects",               sub: "",                     icon: "📁", emoji: "⚡", iconBg: "#b8b1a4", lng: -150.0,             lat: 20.0,              zoom: 4, notFound: true },
+// ── 18 asymmetric radial spokes ──
+const RADIALS: number[] = []
+const baseAngles = [
+  -92, -68, -50, -28, -8, 14, 38, 55, 78, 98,
+  115, 138, 158, 178, 198, 225, 248, 270
 ]
+for (const deg of baseAngles) {
+  RADIALS.push((deg + (H(deg * 7 + 3) - 0.5) * 8) * Math.PI / 180)
+}
+const NR = RADIALS.length
+const nx = (i: number) => (i + 1) % NR
 
-////// Courses //////////////////////////////////
-
-type Course = { code: string; name: string; url: string; tags: string[] }
-
-const COURSES: Course[] = [
-  { code: "CS 136",   name: "Elementary Algorithm Design and Data Abstraction", url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS136",   tags: ["C"] },
-  { code: "CS 234",   name: "Data Types and Structures",                        url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS234",   tags: ["Python"] },
-  { code: "CS 338",   name: "Computer Applications in Business: Databases",     url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS338",   tags: ["SQL"] },
-  { code: "CS 430",   name: "Applications Software Engineering",                url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS430",   tags: ["Python"] },
-  { code: "CS 431",   name: "Data-Intensive Distributed Analytics",             url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-CS.html#CS431",   tags: ["Python", "Spark", "Git"] },
-  { code: "STAT 341", name: "Computational Statistics and Data Analysis",       url: "https://ucalendar.uwaterloo.ca/2324/COURSE/course-STAT.html#STAT341", tags: ["R"] },
-]
-
-////// Detail content //////////////////////////////////
-
-function UoWDetail() {
-  return (
-    <div className="pin-detail">
-      <p className="pin-detail-meta">Sep 2020 – Dec 2025</p>
-      <p className="pin-detail-meta">B.Sc. Mathematics · Economics Minor</p>
-      <p className="pin-detail-bio" style={{ marginBottom: "0.75rem" }}>Relevant coursework:</p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-        {COURSES.map((c) => (
-          <div key={c.code} style={{ display: "flex", alignItems: "center", gap: "0.65rem", padding: "6px 0", borderBottom: "0.5px solid var(--ink-faint)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)", flexShrink: 0, minWidth: 60, textAlign: "center", alignSelf: "center" }}>{c.code}</span>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", flex: 1, minWidth: 0 }}>
-              <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.76rem", color: "var(--blue)", textDecoration: "none", alignSelf: "flex-start", background: "rgba(10,132,255,0.09)", padding: "2px 8px", borderRadius: "6px", transition: "background 0.15s" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(10,132,255,0.18)" }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(10,132,255,0.09)" }}>
-                {c.name}
-              </a>
-              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                {c.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+// Ring point on a spoke at given base radius + jitter
+function rp(baseR: number, spoke: number, jitter: number): Pt {
+  const a = RADIALS[spoke]
+  const r = baseR + (H(baseR * 3 + spoke * 17) - 0.5) * jitter
+  return [Math.round(CX + Math.cos(a) * r), Math.round(CY + Math.sin(a) * r)]
 }
 
-function ExperienceDetail({ job }: { job: typeof siteConfig.experience[0] }) {
-  return (
-    <div className="pin-detail">
-      <p className="pin-detail-meta">{job.period}</p>
-      <ul className="pin-detail-points">
-        {job.points.map((p, i) => <li key={i}>{p}</li>)}
-      </ul>
-      <div className="pin-detail-tags">
-        {job.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
-      </div>
-    </div>
-  )
+// 4 main rings
+const RING0 = Array.from({ length: NR }, (_, i) => rp(70, i, 18))
+const RING1 = Array.from({ length: NR }, (_, i) => rp(150, i, 35))
+const RING2 = Array.from({ length: NR }, (_, i) => rp(290, i, 55))
+const RING3 = Array.from({ length: NR }, (_, i) => rp(460, i, 70))
+const RINGS = [RING0, RING1, RING2, RING3]
+
+// Edge points
+function toEdge(pt: Pt): Pt {
+  const dx = pt[0] - CX, dy = pt[1] - CY
+  let tMin = 1e9
+  const test = (t: number, c: number) => {
+    if (t > 0.01 && c >= -1 && c <= 1001 && t < tMin) tMin = t
+  }
+  if (dx !== 0) { test(-CX / dx, CY + dy * (-CX / dx)); test((1000 - CX) / dx, CY + dy * ((1000 - CX) / dx)) }
+  if (dy !== 0) { test(-CY / dy, CX + dx * (-CY / dy)); test((1000 - CY) / dy, CX + dx * ((1000 - CY) / dy)) }
+  return [Math.round(Math.max(0, Math.min(1000, CX + dx * tMin))), Math.round(Math.max(0, Math.min(1000, CY + dy * tMin)))]
+}
+const EDGE = RING3.map(toEdge)
+
+// ── Build crack paths ──
+const CRACK_PATHS: { d: string; cls: string }[] = []
+
+// 1) Main radial spokes
+for (let i = 0; i < NR; i++) {
+  const pts: Pt[] = [[CX, CY], RING0[i], RING1[i], RING2[i], RING3[i], EDGE[i]]
+  CRACK_PATHS.push({ d: multiCurve(pts, i * 100, 14), cls: "crack-main" })
 }
 
-function ProjectsDetail() {
-  return (
-    <div className="pin-detail">
-      {siteConfig.projects.map((p) => (
-        <div key={p.name} style={{ marginBottom: "0.9rem" }}>
-          <a href={p.url} target="_blank" rel="noopener noreferrer" className="pin-detail-link">{p.name}</a>
-          <p className="pin-detail-bio" style={{ marginTop: "0.2rem" }}>{p.description}</p>
-          <div className="pin-detail-tags" style={{ marginTop: "0.3rem" }}>
-            {p.tags.map((t) => <span key={t} className="pin-detail-tag">{t}</span>)}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
+// 2) Concentric arcs — DISCONNECTED, each segment at its own radius
+//    For each pair of adjacent spokes, generate short arc segments at
+//    varying radii (not locked to ring positions)
+const ARC_RADII = [60, 95, 130, 170, 210, 260, 320, 380, 440]
+for (let ai = 0; ai < ARC_RADII.length; ai++) {
+  const baseR = ARC_RADII[ai]
+  for (let i = 0; i < NR; i++) {
+    // Skip ~30-50% of segments randomly for disconnected look
+    if (H(ai * 50 + i * 31 + 7) < 0.35) continue
+    // Each segment gets its own radius offset
+    const segR = baseR + (H(ai * 80 + i * 43) - 0.5) * 40
+    const a1 = RADIALS[i], a2 = RADIALS[nx(i)]
+    const p1: Pt = [Math.round(CX + Math.cos(a1) * segR), Math.round(CY + Math.sin(a1) * segR)]
+    const p2: Pt = [Math.round(CX + Math.cos(a2) * segR), Math.round(CY + Math.sin(a2) * segR)]
+    CRACK_PATHS.push({
+      d: curvedPath(p1, p2, ai * 200 + i, 6 + ai * 2),
+      cls: baseR < 200 ? "crack-ring-inner" : "crack-ring-outer"
+    })
+  }
 }
 
-function EvanDetail() {
-  return (
-    <div className="pin-detail">
-      <p className="pin-detail-bio">{siteConfig.bio}</p>
-    </div>
-  )
-}
-
-////// Map helpers //////////////////////////////////
-
-declare global {
-  interface Window {
-    mapboxgl: {
-      accessToken: string
-      Map: new (opts: object) => MapboxMap
-      NavigationControl: new (opts?: object) => object
+// 3) Branch cracks
+for (let r = 0; r < 4; r++) {
+  const ring = RINGS[r]
+  for (let i = 0; i < NR; i++) {
+    const prob = r === 0 ? 0.7 : r === 1 ? 0.5 : r === 2 ? 0.35 : 0.2
+    if (H(r * 300 + i * 41 + 7) > prob) continue
+    const branchAngle = RADIALS[i] + (H(r * 400 + i * 53) - 0.5) * 1.8
+    const len = 25 + H(r * 500 + i * 67) * (r === 0 ? 40 : 70)
+    const start = ring[i]
+    const end: Pt = [
+      Math.round(start[0] + Math.cos(branchAngle) * len),
+      Math.round(start[1] + Math.sin(branchAngle) * len),
+    ]
+    CRACK_PATHS.push({ d: curvedPath(start, end, r * 600 + i, 6 + r * 3), cls: "crack-branch" })
+    if (H(r * 700 + i * 83) < 0.35) {
+      const forkAngle = branchAngle + (H(r * 800 + i * 97) - 0.5) * 1.2
+      const forkLen = 15 + H(r * 900 + i * 103) * 30
+      const forkEnd: Pt = [
+        Math.round(end[0] + Math.cos(forkAngle) * forkLen),
+        Math.round(end[1] + Math.sin(forkAngle) * forkLen),
+      ]
+      CRACK_PATHS.push({ d: curvedPath(end, forkEnd, r * 1000 + i, 5), cls: "crack-fork" })
     }
   }
 }
 
-type MapboxMap = {
-  flyTo: (opts: object) => void
-  fitBounds: (bounds: [[number, number], [number, number]], opts?: object) => void
-  addControl: (control: object, position?: string) => void
-  addSource: (id: string, source: object) => void
-  addLayer: (layer: object) => void
-  addImage: (id: string, data: object, opts?: object) => void
-  updateImage: (id: string, data: object) => void
-  hasImage: (id: string) => boolean
-  removeImage: (id: string) => void
-  triggerRepaint: () => void
-  getSource: (id: string) => { setData: (data: object) => void } | undefined
-  getLayer: (id: string) => object | undefined
-  setLayoutProperty: (layer: string, prop: string, value: unknown) => void
-  on: (event: string, layerId: string | (() => void), cb?: (e: { features?: { properties?: { id?: string } }[] }) => void) => void
-  getCanvas: () => HTMLCanvasElement
-  remove: () => void
+// 4) Extra radial spokes
+const EXTRA_ANGLES = [-78, -35, 5, 42, 88, 128, 165, 215].map(
+  (d, i) => (d + (H(i * 37 + 999) - 0.5) * 12) * Math.PI / 180
+)
+for (let i = 0; i < EXTRA_ANGLES.length; i++) {
+  const a = EXTRA_ANGLES[i]
+  const startR = 80 + H(i * 47 + 200) * 60
+  const endR = 250 + H(i * 59 + 300) * 200
+  const start: Pt = [Math.round(CX + Math.cos(a) * startR), Math.round(CY + Math.sin(a) * startR)]
+  const mid: Pt = [
+    Math.round(CX + Math.cos(a + (H(i * 71 + 400) - 0.5) * 0.15) * ((startR + endR) / 2)),
+    Math.round(CY + Math.sin(a + (H(i * 71 + 400) - 0.5) * 0.15) * ((startR + endR) / 2)),
+  ]
+  const end: Pt = [Math.round(CX + Math.cos(a) * endR), Math.round(CY + Math.sin(a) * endR)]
+  CRACK_PATHS.push({ d: multiCurve([start, mid, end], i * 150, 18), cls: "crack-extra" })
 }
 
+// 5) Micro-cracks near impact
+for (let i = 0; i < 12; i++) {
+  const a = (H(i * 23 + 500) * 2 - 1) * Math.PI
+  const r1 = 15 + H(i * 29 + 600) * 30
+  const r2 = 50 + H(i * 31 + 700) * 40
+  const s: Pt = [Math.round(CX + Math.cos(a) * r1), Math.round(CY + Math.sin(a) * r1)]
+  const e: Pt = [Math.round(CX + Math.cos(a + (H(i * 37 + 800) - 0.5) * 0.5) * r2),
+    Math.round(CY + Math.sin(a + (H(i * 37 + 800) - 0.5) * 0.5) * r2)]
+  CRACK_PATHS.push({ d: curvedPath(s, e, i * 170, 5), cls: "crack-micro" })
+}
+
+// ── Shard polygons ──
+// Inner shards: center → RING2 triangles
+const INNER_SHARDS = Array.from({ length: NR }, (_, i) => {
+  const j = nx(i)
+  return [[CX, CY] as Pt, RING2[i], RING2[j]]
+})
+
+// Outer shards: RING2 → RING3 → edge
+const VP_CORNERS: Pt[] = [[0, 0], [1000, 0], [1000, 1000], [0, 1000]]
+function vpSide(p: Pt): number {
+  if (p[1] <= 0) return 0; if (p[0] >= 1000) return 1; if (p[1] >= 1000) return 2; return 3
+}
+function corners(a: Pt, b: Pt): Pt[] {
+  const sa = vpSide(a), sb = vpSide(b)
+  const r: Pt[] = []
+  let s = sa
+  while (s !== sb) { r.push(VP_CORNERS[(s + 1) % 4]); s = (s + 1) % 4 }
+  return r
+}
+const OUTER_SHARDS = Array.from({ length: NR }, (_, i) => {
+  const j = nx(i)
+  return [RING2[i], RING3[i], EDGE[i], ...corners(EDGE[i], EDGE[j]), EDGE[j], RING3[j], RING2[j]]
+})
+
+function shade(i: number, base: number): string {
+  const v = Math.round((base + H(i * 17 + 33) * 0.025) * 255)
+  return `rgb(${v},${v},${v})`
+}
+
+// ── Nav buttons = actual crack-formed shards (quads between 2 spokes × 2 rings) ──
+// tiles: array of {spokeI, ringR} — multiple tiles share one link
+// Scattered across ring levels for visual variety
+type NavItem = {
+  tiles: { spokeI: number; ringR: number }[]
+  label: string; href: string; rot: number; external?: boolean; icon?: string
+}
+const NAV_ITEMS: NavItem[] = [
+  { tiles: [{ spokeI: 2, ringR: 3 }],  label: "ABOUT",      href: "/about",      rot: -5  },
+  { tiles: [{ spokeI: 14, ringR: 2 }], label: "PROJECTS",   href: "/projects",   rot: 8   },
+  { tiles: [{ spokeI: 15, ringR: 2 }], label: "EXPERIENCE", href: "/experience", rot: -4  },
+  { tiles: [{ spokeI: 5, ringR: 2 }],  label: "PIXEL ART",  href: "/pixel-art",  rot: -9  },
+  // CTA links — right side, outermost ring band
+  { tiles: [{ spokeI: 6, ringR: 3 }],  label: "LINKEDIN", href: siteConfig.links.linkedin, rot: 3,  external: true, icon: "/icons/linkedin_logo.png" },
+  { tiles: [{ spokeI: 7, ringR: 3 }], label: "GITHUB",   href: siteConfig.links.github,   rot: -6, external: true },
+  { tiles: [{ spokeI: 8, ringR: 3 }], label: "RESUME",   href: siteConfig.links.resume,   rot: 5,  external: true },
+]
+
+// ── Map tile: full outer shard wedge (spoke 10, left side, RING2 → edge) ──
+const MAP_SHARD_SPOKE = 10
+
+const RING_ARRAYS = [RING0, RING1, RING2, RING3, EDGE]
+function makeShard(spokeI: number, ringR: number): Pt[] {
+  const j = nx(spokeI)
+  return [RING_ARRAYS[ringR][spokeI], RING_ARRAYS[ringR + 1][spokeI], RING_ARRAYS[ringR + 1][j], RING_ARRAYS[ringR][j]]
+}
+
+const MAP_SHARDS = [OUTER_SHARDS[MAP_SHARD_SPOKE]]
+
+// Shard centroid in SVG coords (0-1000) → percentage offset from page center
+const MAP_SHARD_CENTROID: Pt = (() => {
+  const pts = MAP_SHARDS[0]
+  const n = pts.length
+  return [
+    Math.round(pts.reduce((s, v) => s + v[0], 0) / n),
+    Math.round(pts.reduce((s, v) => s + v[1], 0) / n),
+  ] as Pt
+})()
+// Offset from page center in percentage (-50 to +50 range)
+const MAP_CENTER_OFFSET: Pt = [
+  (MAP_SHARD_CENTROID[0] - 500) / 10, // % of viewport width
+  (MAP_SHARD_CENTROID[1] - 500) / 10, // % of viewport height
+]
+
+// CSS mask data URI — white polygons on transparent bg
+const MAP_MASK_SVG = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000' preserveAspectRatio='none'>${MAP_SHARDS.map(p => `<polygon points='${p.map(v => v.join(",")).join(" ")}' fill='white'/>`).join("")}</svg>`
+const MAP_MASK = `url("data:image/svg+xml,${encodeURIComponent(MAP_MASK_SVG)}")`
+
+// Mapbox loader
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? ""
+declare global {
+  interface Window {
+    mapboxgl?: {
+      accessToken: string
+      Map: new (opts: Record<string, unknown>) => MapboxMap
+      NavigationControl: new (opts?: Record<string, unknown>) => object
+    }
+  }
+}
+type MapboxMap = {
+  on: (event: string, layerId: string | (() => void), cb?: () => void) => void
+  resize: () => void
+  remove: () => void
+  panBy: (offset: [number, number], opts?: Record<string, unknown>) => void
+  setPaintProperty: (layer: string, prop: string, value: unknown) => void
+  getStyle: () => { layers?: { id: string; type: string }[] }
+}
 function loadMapbox(): Promise<void> {
   return new Promise((resolve) => {
     if (window.mapboxgl) { resolve(); return }
     if (!document.getElementById("mb-css")) {
-      const l = document.createElement("link"); l.id = "mb-css"; l.rel = "stylesheet"
-      l.href = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css"
-      document.head.appendChild(l)
+      const link = document.createElement("link")
+      link.id = "mb-css"; link.rel = "stylesheet"
+      link.href = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css"
+      document.head.appendChild(link)
     }
     if (!document.getElementById("mb-js")) {
-      const s = document.createElement("script"); s.id = "mb-js"
-      s.src = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"
-      s.onload = () => resolve(); document.head.appendChild(s)
-    } else {
-      const c = setInterval(() => { if (window.mapboxgl) { clearInterval(c); resolve() } }, 100)
+      const script = document.createElement("script")
+      script.id = "mb-js"
+      script.src = "https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"
+      script.onload = () => resolve()
+      document.head.appendChild(script)
+      return
     }
+    const timer = setInterval(() => {
+      if (window.mapboxgl) { clearInterval(timer); resolve() }
+    }, 100)
   })
 }
 
-const SIDEBAR_MAP_STYLE = {
-  version: 8,
-  glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}",
-  sources: {
-    "mapbox-streets": {
-      type: "vector",
-      url: "mapbox://mapbox.mapbox-streets-v8",
-    },
-    "toronto-label": {
-      type: "geojson",
-      data: {
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [-79.3832, 43.6532] },
-            properties: { name: "Toronto" },
-          },
-        ],
-      },
-    },
-  },
-  layers: [
-    { id: "background", type: "background", paint: { "background-color": "#f5f0e8" } },
-    { id: "water", type: "fill", source: "mapbox-streets", "source-layer": "water", paint: { "fill-color": "#add7f0" } },
-    { id: "parks", type: "fill", source: "mapbox-streets", "source-layer": "landuse", filter: ["==", "class", "park"], paint: { "fill-color": "#a8d5ba" } },
-    { id: "roads-minor", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "street", "street_limited", "service"], paint: { "line-color": "#c8b89a", "line-width": 0.7 } },
-    { id: "roads-major", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "primary", "secondary", "tertiary"], paint: { "line-color": "#b39f82", "line-width": 1.3 } },
-    { id: "roads-highway", type: "line", source: "mapbox-streets", "source-layer": "road", filter: ["in", "class", "motorway", "trunk"], paint: { "line-color": "#927f66", "line-width": 2.2 } },
-    { id: "building", type: "fill", source: "mapbox-streets", "source-layer": "building", paint: { "fill-color": "#e8decd", "fill-outline-color": "#c8b89a" } },
-    {
-      id: "road-labels",
-      type: "symbol",
-      source: "mapbox-streets",
-      "source-layer": "road",
-      layout: {
-        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
-        "text-font": ["DIN Pro Regular", "Arial Unicode MS Regular"],
-        "text-size": 10,
-        "symbol-placement": "line",
-      },
-      paint: {
-        "text-color": "#6a5a42",
-        "text-halo-color": "#f5f0e8",
-        "text-halo-width": 1,
-      },
-    },
-    {
-      id: "toronto-label",
-      type: "symbol",
-      source: "toronto-label",
-      layout: {
-        "text-field": ["get", "name"],
-        "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 4, 12, 10, 18],
-        "text-letter-spacing": 0.02,
-      },
-      paint: {
-        "text-color": "#4f8d64",
-        "text-halo-color": "#f5f0e8",
-        "text-halo-width": 1.5,
-      },
-    },
-  ],
+// Flatten: for each nav item, generate all tile shards
+// Track which flat index maps to which nav item
+const NAV_FLAT: { navIdx: number; shard: Pt[] }[] = []
+for (let ni = 0; ni < NAV_ITEMS.length; ni++) {
+  for (const t of NAV_ITEMS[ni].tiles) {
+    NAV_FLAT.push({ navIdx: ni, shard: makeShard(t.spokeI, t.ringR) })
+  }
+}
+// For each nav item, compute a bounding box centroid across all its tiles
+const NAV_CENTROIDS: Pt[] = NAV_ITEMS.map((item, ni) => {
+  const tiles = NAV_FLAT.filter(f => f.navIdx === ni)
+  const allPts = tiles.flatMap(t => t.shard)
+  const n = allPts.length
+  return [Math.round(allPts.reduce((s, v) => s + v[0], 0) / n), Math.round(allPts.reduce((s, v) => s + v[1], 0) / n)]
+})
+
+function svgPts(p: Pt[]): string { return p.map(v => v.join(",")).join(" ") }
+function cssClip(p: Pt[]): string { return `polygon(${p.map(([x, y]) => `${x / 10}% ${y / 10}%`).join(", ")})` }
+function centroid(p: Pt[]): Pt {
+  const n = p.length
+  return [Math.round(p.reduce((s, v) => s + v[0], 0) / n), Math.round(p.reduce((s, v) => s + v[1], 0) / n)]
 }
 
-const MAP_STYLE_URL = "mapbox://styles/mapbox/streets-v12"
-const ROUTE_SOURCE_ID = "route-line"
-const ROUTE_LAYER_ID = "route-line-layer"
-const ROUTE_DEST_SOURCE_ID = "route-destination"
-const ROUTE_DEST_LAYER_ID = "route-destination-layer"
-const ROUTE_DEST_ICON_ID = "route-destination-pin"
-const OAKVILLE_ORIGIN: [number, number] = [PINS[0].lng, PINS[0].lat]
-
-////// Clock //////////////////////////////////
-
-function Clock() {
-  const [time, setTime] = useState("")
-  const [date, setDate] = useState("")
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date()
-      const rawTime = now.toLocaleTimeString("en-CA", {
-        timeZone: "America/Toronto", hour: "numeric", minute: "2-digit", hour12: true,
-      })
-      setTime(rawTime.replace(/\./g, "").replace(/\b(am|pm)\b/i, (m) => m.toUpperCase()))
-      setDate(now.toLocaleDateString("en-CA", {
-        timeZone: "America/Toronto", weekday: "short", month: "short", day: "2-digit",
-      }))
-    }
-    tick()
-    const t = setInterval(tick, 1000)
-    return () => clearInterval(t)
-  }, [])
-  return (
-    <div style={{
-      padding: "0.4rem 0.75rem",
-      background: "rgba(200,184,154,0.15)",
-      borderTop: "0.5px solid var(--ink-faint)",
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--ink-muted)",
-      flexShrink: 0,
-    }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#30b94d", boxShadow: "0 0 0 2px rgba(48,185,77,0.2)" }} />
-        <span>EST / Toronto</span>
-      </span>
-      <span style={{ color: "var(--ink)", letterSpacing: "0.03em" }}>{date} {time}</span>
-    </div>
-  )
-}
-
-////// Main component //////////////////////////////////
-
-export default function FindEvan() {
+export default function Home() {
+  const ref = useRef<HTMLDivElement>(null)
+  const navEls = useRef<(SVGPolygonElement | null)[]>([])
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapboxMap | null>(null)
-  const sheetStartYRef = useRef<number | null>(null)
-  const sheetDraggingRef = useRef(false)
-  const sheetCanDragRef = useRef(false)
-  const sheetOffsetRef = useRef(0)
-  const sheetScrollRef = useRef<HTMLDivElement | null>(null)
-  const [activePin, setActivePin] = useState<PinId | null>(null)
-  const [expandedPin, setExpandedPin] = useState<PinId | null>(null)
-  const [sheetOffsetY, setSheetOffsetY] = useState(0)
-  const [mapReady, setMapReady] = useState(false)
-  const [showVisitorPins, setShowVisitorPins] = useState(false)
-  const [visitorPins, setVisitorPins] = useState<{ id: string; lat: number; lng: number; pixel_art: string }[]>([])
-  const [destinationQuery, setDestinationQuery] = useState("")
-  const [routeStatus, setRouteStatus] = useState("")
-  const [routing, setRouting] = useState(false)
-  const [hasRoute, setHasRoute] = useState(false)
-  const [routeSuggestions, setRouteSuggestions] = useState<RouteSuggestion[]>([])
-  const [selectedSuggestion, setSelectedSuggestion] = useState<RouteSuggestion | null>(null)
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [headerAnimTrigger, setHeaderAnimTrigger] = useState(0)
+  const mapShardEl = useRef<SVGPolygonElement | null>(null)
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.fromTo(".shard-poly",
+        { opacity: 0 },
+        { opacity: 1, duration: 0.4, stagger: { each: 0.012, from: "random" }, ease: "power2.out", delay: 0.05 }
+      )
+      gsap.fromTo(".crack-path",
+        { strokeDashoffset: 800 },
+        { strokeDashoffset: 0, duration: 1, stagger: { each: 0.008, from: "random" }, ease: "power2.out", delay: 0.1 }
+      )
+      gsap.fromTo(".nav-label",
+        { opacity: 0, scale: 2 },
+        { opacity: 1, scale: 1, duration: 0.3, stagger: 0.08, ease: "back.out(2)", delay: 0.5 }
+      )
+      gsap.fromTo(".hero-center",
+        { opacity: 0, scale: 0.85 },
+        { opacity: 1, scale: 1, duration: 0.9, ease: "power4.out", delay: 0.35 }
+      )
 
-  const geojsonData = useCallback((active: PinId | null) => ({
-    type: "FeatureCollection",
-    features: PINS.map((pin) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
-      properties: {
-        id: pin.id,
-        icon: `pin-${pin.id}-${pin.id === active ? "active" : "idle"}`,
-        sortKey: pin.id === active ? 2 : 1,
-      },
-    })),
-  }), [])
-
-  const drawPinImage = useCallback((pin: Pin, active: boolean): Promise<HTMLCanvasElement> => {
-    return new Promise((resolve) => {
-      const size = active ? 80 : 60
-      const pixelRatio = 2
-      const c = document.createElement("canvas")
-      c.width = size * pixelRatio
-      c.height = size * pixelRatio
-      const ctx = c.getContext("2d")!
-      ctx.scale(pixelRatio, pixelRatio)
-      const cx = size / 2, cy = size / 2, r = size / 2 - 3
-
-      const draw = (img?: HTMLImageElement) => {
-        ctx.clearRect(0, 0, size, size)
-        ctx.shadowColor = "rgba(0,0,0,0.28)"
-        ctx.shadowBlur = active ? 10 : 6
-        ctx.shadowOffsetY = 2
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.fillStyle = "white"; ctx.fill()
-        ctx.shadowColor = "transparent"
-        ctx.save()
-        ctx.beginPath(); ctx.arc(cx, cy, r - 3, 0, Math.PI * 2); ctx.clip()
-        if (img) {
-          ctx.drawImage(img, 0, 0, size, size)
-        } else {
-          ctx.fillStyle = pin.notFound ? "#8e8e93" : pin.iconBg
-          ctx.fillRect(0, 0, size, size)
-          ctx.fillStyle = "white"
-          ctx.font = `bold ${active ? 26 : 19}px sans-serif`
-          ctx.textAlign = "center"; ctx.textBaseline = "middle"
-          ctx.fillText(pin.emoji, cx, cy)
-        }
-        ctx.restore()
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.strokeStyle = active ? "#0a84ff" : "#ffffff"
-        ctx.lineWidth = active ? 2.5 : 2
-        ctx.stroke()
-        resolve(c)
-      }
-      if (!pin.notFound || pin.id === "projects") {
-        const img = new Image()
-        img.onload = () => draw(img); img.onerror = () => draw()
-        img.src = `/pins/${pin.id}.jpg`
-      } else { draw() }
-    })
+    }, ref)
+    return () => ctx.revert()
   }, [])
 
-  // Sync/toggle a pin — used by both sidebar clicks and map clicks
-  const togglePin = useCallback((id: PinId) => {
-    setActivePin((prev) => {
-      const next = prev === id ? null : id
-      if (next) {
-        const pin = PINS.find((p) => p.id === id)!
-        mapRef.current?.flyTo({ center: [pin.lng, pin.lat], zoom: pin.zoom, duration: 1200, essential: true })
-        setExpandedPin(id)
-      } else {
-        setExpandedPin(null)
-        const prev_pin = PINS.find((p) => p.id === id)!
-        mapRef.current?.flyTo({ center: [prev_pin.lng, prev_pin.lat], zoom: prev_pin.zoom - 2, duration: 900, essential: true })
-      }
-      mapRef.current?.getSource("pins")?.setData(geojsonData(next) as unknown as object)
-      return next
-    })
-  }, [geojsonData])
-
-  const handleRouteSearch = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const map = mapRef.current
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-    const query = destinationQuery.trim()
-    if (!map || !token || !query) return
-
-    setRouting(true)
-    setRouteStatus("finding route...")
-    setShowSuggestions(false)
-    setHasRoute(false)
-    map.getSource(ROUTE_SOURCE_ID)?.setData({
-      type: "FeatureCollection",
-      features: [],
-    } as unknown as object)
-    map.getSource(ROUTE_DEST_SOURCE_ID)?.setData({
-      type: "FeatureCollection",
-      features: [],
-    } as unknown as object)
-
-    try {
-      const picked = selectedSuggestion && selectedSuggestion.name === query ? selectedSuggestion : null
-      let destination = picked?.center
-      let placeName = picked?.name ?? query
-
-      if (!destination) {
-        const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1&autocomplete=true&proximity=${OAKVILLE_ORIGIN[0]},${OAKVILLE_ORIGIN[1]}`
-        const geocodeRes = await fetch(geocodeUrl)
-        if (!geocodeRes.ok) throw new Error("geocode failed")
-        const geocodeData = await geocodeRes.json() as { features?: Array<{ center?: [number, number]; place_name?: string }> }
-        destination = geocodeData.features?.[0]?.center
-        placeName = geocodeData.features?.[0]?.place_name ?? query
-      }
-
-      if (!destination) {
-        setRouteStatus("destination not found")
-        return
-      }
-
-      const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${OAKVILLE_ORIGIN[0]},${OAKVILLE_ORIGIN[1]};${destination[0]},${destination[1]}?geometries=geojson&overview=full&access_token=${token}`
-      const directionsRes = await fetch(directionsUrl)
-      if (!directionsRes.ok) throw new Error("directions failed")
-      const directionsData = await directionsRes.json() as {
-        routes?: Array<{ distance?: number; duration?: number; geometry?: { coordinates?: [number, number][] } }>
-      }
-      const route = directionsData.routes?.[0]
-      const coords = route?.geometry?.coordinates
-      if (!route || !coords || coords.length < 2) {
-        setRouteStatus("no drivable route found")
-        return
-      }
-
-      map.getSource(ROUTE_SOURCE_ID)?.setData({
-        type: "FeatureCollection",
-        features: [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} }],
-      } as unknown as object)
-      map.getSource(ROUTE_DEST_SOURCE_ID)?.setData({
-        type: "FeatureCollection",
-        features: [{ type: "Feature", geometry: { type: "Point", coordinates: destination }, properties: {} }],
-      } as unknown as object)
-      setHasRoute(true)
-
-      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity
-      for (const [lng, lat] of coords) {
-        if (lng < minLng) minLng = lng
-        if (lat < minLat) minLat = lat
-        if (lng > maxLng) maxLng = lng
-        if (lat > maxLat) maxLat = lat
-      }
-      map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 80, duration: 900 })
-
-      const km = (route.distance ?? 0) / 1000
-      const mins = Math.round((route.duration ?? 0) / 60)
-      setRouteStatus(`${km.toFixed(1)} km · ${mins} min to ${placeName}`)
-    } catch {
-      setRouteStatus("route unavailable right now")
-    } finally {
-      setRouting(false)
-    }
-  }, [destinationQuery, selectedSuggestion])
-
-  const clearRoute = useCallback(() => {
-    mapRef.current?.getSource(ROUTE_SOURCE_ID)?.setData({
-      type: "FeatureCollection",
-      features: [],
-    } as unknown as object)
-    mapRef.current?.getSource(ROUTE_DEST_SOURCE_ID)?.setData({
-      type: "FeatureCollection",
-      features: [],
-    } as unknown as object)
-    setHasRoute(false)
-    setDestinationQuery("")
-    setSelectedSuggestion(null)
-    setRouteSuggestions([])
-    setShowSuggestions(false)
-    setRouteStatus("")
-  }, [])
-
+  // Initialize Mapbox map
   useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-    const query = destinationQuery.trim()
-
-    if (!token || query.length < 2) {
-      setRouteSuggestions([])
-      setShowSuggestions(false)
-      return
-    }
-
+    if (!MAPBOX_TOKEN || !mapContainerRef.current) return
     let cancelled = false
-    const timer = setTimeout(async () => {
-      try {
-        const suggestUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&autocomplete=true&proximity=${OAKVILLE_ORIGIN[0]},${OAKVILLE_ORIGIN[1]}`
-        const res = await fetch(suggestUrl)
-        if (!res.ok) throw new Error("suggest failed")
-        const data = await res.json() as { features?: Array<{ center?: [number, number]; place_name?: string }> }
-        if (cancelled) return
-        const suggestions = (data.features ?? [])
-          .filter((f): f is { center: [number, number]; place_name: string } => Array.isArray(f.center) && typeof f.place_name === "string")
-          .map((f) => ({ name: f.place_name, center: f.center }))
-        setRouteSuggestions(suggestions)
-        setShowSuggestions(suggestions.length > 0)
-      } catch {
-        if (cancelled) return
-        setRouteSuggestions([])
-        setShowSuggestions(false)
-      }
-    }, 180)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [destinationQuery])
-
-  // Init map
-  useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-    if (!token) return
-    let cancelled = false
-
     loadMapbox().then(() => {
-      if (cancelled || mapRef.current) return
-      window.mapboxgl.accessToken = token
+      if (cancelled || mapRef.current || !mapContainerRef.current || !window.mapboxgl) return
+      window.mapboxgl.accessToken = MAPBOX_TOKEN
+      // Compute pixel offset so map center aligns with tile centroid
+      const el = mapContainerRef.current
+      const offsetX = Math.round(MAP_CENTER_OFFSET[0] / 100 * el.clientWidth)
+      const offsetY = Math.round(MAP_CENTER_OFFSET[1] / 100 * el.clientHeight)
       const map = new window.mapboxgl.Map({
-        container: "mapbox-container",
-        style: MAP_STYLE_URL,
-        center: [PINS[0].lng, PINS[0].lat],
-        zoom: PINS[0].zoom,
+        container: mapContainerRef.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-79.55, 43.65],
+        zoom: 9.2,
+        projection: "mercator" as unknown as undefined,
+        interactive: true,
         attributionControl: false,
       })
-      map.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), "bottom-right")
-
+      // Shift the map so Toronto appears at the tile centroid
       map.on("load", () => {
-        if (cancelled) return
-
-        const mapAny = map as unknown as {
-          getStyle: () => { layers?: Array<{ id: string; type?: string }> }
-          setPaintProperty: (layerId: string, property: string, value: unknown) => void
-          addLayer: (layer: object) => void
-          getLayer: (id: string) => object | undefined
-          moveLayer: (id: string, beforeId?: string) => void
-        }
-        const pastel = {
-          bg: "#f6f1e8",
-          land: "#efe8da",
-          water: "#cfe7f5",
-          park: "#d7ebcf",
-          building: "#e7dcc9",
-          roadMajor: "#6f5b46",
-          roadMedium: "#8f7a64",
-          roadMinor: "#c2b29e",
-          label: "#2a2016",
-          labelHalo: "#f6f1e8",
-        }
-        const roadLayerPattern = /(road|street|motorway|highway|bridge|tunnel)/i
-        const roadCasingPattern = /(^|[-_])(case|casing|outline)([-_]|$)/i
-        const styleLayers = mapAny.getStyle().layers ?? []
-
-        for (const layer of styleLayers) {
-          const id = layer.id
-          const type = layer.type
-
-          try {
-            if (id === "background" && type === "background") {
-              mapAny.setPaintProperty(id, "background-color", pastel.bg)
-              continue
-            }
-
-            if (type === "fill") {
-              if (/water/i.test(id)) {
-                mapAny.setPaintProperty(id, "fill-color", pastel.water)
-              } else if (/(park|wood|green|grass|landuse|nature)/i.test(id)) {
-                mapAny.setPaintProperty(id, "fill-color", pastel.park)
-              } else if (/building/i.test(id)) {
-                mapAny.setPaintProperty(id, "fill-color", pastel.building)
-              } else if (/(land|earth|terrain)/i.test(id)) {
-                mapAny.setPaintProperty(id, "fill-color", pastel.land)
-              }
-              continue
-            }
-
-            if (type === "line" && roadLayerPattern.test(id)) {
-              mapAny.setPaintProperty(id, "line-opacity", 0)
-              continue
-            }
-
-            if (type === "symbol" && /(road).*(oneway|arrow)|(oneway|arrow).*(road)/i.test(id)) {
-              mapAny.setPaintProperty(id, "icon-opacity", 0)
-              continue
-            }
-
-            if (type === "symbol" && /(motorway|trunk)/i.test(id) && /(shield|route-number|road-number)/i.test(id)) {
-              mapAny.setPaintProperty(id, "text-color", "#ffffff")
-              continue
-            }
-
-            if (type === "symbol" && /(shield|route-number|road-number)/i.test(id)) {
-              mapAny.setPaintProperty(id, "text-color", "#2a2016")
-              continue
-            }
-
-            if (type === "symbol" && /(label|place|poi|road)/i.test(id)) {
-              mapAny.setPaintProperty(id, "text-color", pastel.label)
-              mapAny.setPaintProperty(id, "text-halo-color", pastel.labelHalo)
-            }
-          } catch {
-            // Ignore layers that don't expose a targeted paint property.
-          }
-        }
-
-        if (!mapAny.getLayer("custom-road-major")) {
-          mapAny.addLayer({
-            id: "custom-road-major",
-            type: "line",
-            source: "composite",
-            "source-layer": "road",
-            minzoom: 7,
-            filter: [
-              "==",
-              ["match", ["get", "class"], ["motorway", "trunk", "primary"], 1, 0],
-              1,
-            ],
-            layout: {
-              "line-cap": "round",
-              "line-join": "round",
-            },
-            paint: {
-              "line-color": pastel.roadMajor,
-              "line-width": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                5,
-                1.05,
-                14,
-                1.75,
-              ],
-              "line-opacity": 0.98,
-            },
-          })
-        }
-
-        if (!mapAny.getLayer("custom-road-medium")) {
-          mapAny.addLayer({
-            id: "custom-road-medium",
-            type: "line",
-            source: "composite",
-            "source-layer": "road",
-            minzoom: 8,
-            filter: [
-              "==",
-              ["match", ["get", "class"], ["secondary", "tertiary"], 1, 0],
-              1,
-            ],
-            layout: {
-              "line-cap": "round",
-              "line-join": "round",
-            },
-            paint: {
-              "line-color": pastel.roadMedium,
-              "line-width": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                5,
-                0.72,
-                14,
-                1.05,
-              ],
-              "line-opacity": 0.95,
-            },
-          })
-        }
-
-        if (!mapAny.getLayer("custom-road-minor")) {
-          mapAny.addLayer({
-            id: "custom-road-minor",
-            type: "line",
-            source: "composite",
-            "source-layer": "road",
-            minzoom: 10,
-            filter: [
-              "==",
-              ["match", ["get", "class"], ["street", "street_limited", "residential", "living_street", "service", "track", "link"], 1, 0],
-              1,
-            ],
-            layout: {
-              "line-cap": "round",
-              "line-join": "round",
-            },
-            paint: {
-              "line-color": pastel.roadMinor,
-              "line-width": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                5,
-                0.28,
-                14,
-                0.48,
-              ],
-              "line-opacity": 0.92,
-            },
-          })
-        }
-
-        const registerAll = PINS.flatMap((pin) =>
-          (["idle", "active"] as const).map(async (state) => {
-            const key = `pin-${pin.id}-${state}`
-            if (map.hasImage(key)) return
-            const canvas = await drawPinImage(pin, state === "active")
-            const imgData = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height)
-            map.addImage(
-              key,
-              { width: canvas.width, height: canvas.height, data: new Uint8Array(imgData.data.buffer) },
-              { pixelRatio: 2 }
-            )
-          })
-        )
-
-        Promise.all(registerAll).then(() => {
-          if (cancelled) return
-          map.addSource("pins", { type: "geojson", data: geojsonData(null) })
-          map.addLayer({ id: "pins-layer", type: "symbol", source: "pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1, "symbol-sort-key": ["get", "sortKey"] } })
-
-          map.addSource("visitor-pins", { type: "geojson", data: { type: "FeatureCollection", features: [] } })
-          map.addLayer({ id: "visitor-pins-layer", type: "symbol", source: "visitor-pins", layout: { "icon-image": ["get", "icon"], "icon-allow-overlap": true, "icon-ignore-placement": true, "icon-anchor": "center", "icon-size": 1, "visibility": "none" } })
-
-          map.addSource(ROUTE_SOURCE_ID, { type: "geojson", data: { type: "FeatureCollection", features: [] } })
-          map.addLayer({
-            id: ROUTE_LAYER_ID,
-            type: "line",
-            source: ROUTE_SOURCE_ID,
-            paint: {
-              "line-color": "#0a84ff",
-              "line-width": 3,
-              "line-opacity": 0.88,
-            },
-            layout: {
-              "line-cap": "round",
-              "line-join": "round",
-            },
-          })
-
-          if (!map.hasImage(ROUTE_DEST_ICON_ID)) {
-            const c = document.createElement("canvas")
-            c.width = 72
-            c.height = 72
-            const ctx = c.getContext("2d")!
-
-            // Dark red needle-style pin with a silver metallic base.
-            ctx.beginPath()
-            ctx.moveTo(36, 60)
-            ctx.lineTo(28, 43)
-            ctx.lineTo(44, 43)
-            ctx.closePath()
-            ctx.fillStyle = "#8e1f2f"
-            ctx.fill()
-
-            ctx.beginPath()
-            ctx.arc(36, 30, 15, 0, Math.PI * 2)
-            ctx.fillStyle = "#9f2a3a"
-            ctx.fill()
-
-            ctx.beginPath()
-            ctx.arc(36, 30, 15, 0, Math.PI * 2)
-            ctx.strokeStyle = "#6f1421"
-            ctx.lineWidth = 2.2
-            ctx.stroke()
-
-            ctx.beginPath()
-            ctx.arc(36, 30, 6, 0, Math.PI * 2)
-            ctx.fillStyle = "#f5e8e8"
-            ctx.fill()
-
-            ctx.beginPath()
-            ctx.moveTo(36, 62)
-            ctx.lineTo(32.5, 68)
-            ctx.lineTo(39.5, 68)
-            ctx.closePath()
-            ctx.fillStyle = "#c9cdd3"
-            ctx.fill()
-
-            ctx.beginPath()
-            ctx.moveTo(36, 62)
-            ctx.lineTo(32.5, 68)
-            ctx.lineTo(39.5, 68)
-            ctx.closePath()
-            ctx.strokeStyle = "#8e949c"
-            ctx.lineWidth = 1
-            ctx.stroke()
-
-            const d = ctx.getImageData(0, 0, c.width, c.height)
-            map.addImage(ROUTE_DEST_ICON_ID, { width: c.width, height: c.height, data: new Uint8Array(d.data.buffer) }, { pixelRatio: 2 })
-          }
-
-          map.addSource(ROUTE_DEST_SOURCE_ID, { type: "geojson", data: { type: "FeatureCollection", features: [] } })
-          map.addLayer({
-            id: ROUTE_DEST_LAYER_ID,
-            type: "symbol",
-            source: ROUTE_DEST_SOURCE_ID,
-            layout: {
-              "icon-image": ROUTE_DEST_ICON_ID,
-              "icon-anchor": "bottom",
-              "icon-allow-overlap": true,
-              "icon-ignore-placement": true,
-              "icon-size": 1.24,
-            },
-          })
-
-          const labelLayerIds = (mapAny.getStyle().layers ?? [])
-            .filter((layer) => layer.type === "symbol" && /(label|place|road|poi|transit)/i.test(layer.id))
-            .map((layer) => layer.id)
-          for (const id of labelLayerIds) {
-            try { mapAny.moveLayer(id) } catch {}
-          }
-          try { mapAny.moveLayer(ROUTE_LAYER_ID) } catch {}
-          try { mapAny.moveLayer(ROUTE_DEST_LAYER_ID) } catch {}
-          try { mapAny.moveLayer("pins-layer") } catch {}
-          try { mapAny.moveLayer("visitor-pins-layer") } catch {}
-
-          map.on("click", "pins-layer", (e) => {
-            const id = e.features?.[0]?.properties?.id as PinId | undefined
-            if (id) togglePin(id)
-          })
-          map.on("mouseenter", "pins-layer", () => { map.getCanvas().style.cursor = "pointer" })
-          map.on("mouseleave", "pins-layer", () => { map.getCanvas().style.cursor = "" })
-
+        if (!cancelled) {
+          map.panBy([offsetX, offsetY], { animate: false } as Record<string, unknown>)
+          map.resize()
           mapRef.current = map
-          setMapReady(true)
-        })
+        }
+      })
+      const ro = new ResizeObserver(() => map.resize())
+      ro.observe(mapContainerRef.current!)
+    })
+    return () => { cancelled = true; mapRef.current?.remove(); mapRef.current = null }
+  }, [])
+
+  // Store original paint colors so we can restore on leave
+  const origColors = useRef<Map<string, { prop: string; val: unknown }>>(new Map())
+
+  const setMapRed = useCallback((red: boolean) => {
+    const map = mapRef.current
+    if (!map) return
+    const style = map.getStyle()
+    if (!style?.layers) return
+    for (const layer of style.layers) {
+      const l = layer as unknown as Record<string, Record<string, unknown>>
+      const id = layer.id
+      const t = layer.type
+
+      // Determine which paint properties to change
+      const changes: { prop: string; redVal: string }[] = []
+
+      if (t === "background") {
+        changes.push({ prop: "background-color", redVal: "#120a0a" })
+      } else if (t === "fill") {
+        if (id.includes("water") || id.includes("ocean")) {
+          changes.push({ prop: "fill-color", redVal: "#1a0e0e" })
+        } else {
+          changes.push({ prop: "fill-color", redVal: "#241414" })
+        }
+      } else if (t === "line") {
+        if (id.includes("road")) {
+          changes.push({ prop: "line-color", redVal: "#5c2020" })
+        } else if (id.includes("water") || id.includes("ocean")) {
+          changes.push({ prop: "line-color", redVal: "#1a0e0e" })
+        } else {
+          changes.push({ prop: "line-color", redVal: "#3a1515" })
+        }
+      } else if (t === "symbol") {
+        // Keep text labels white
+        changes.push({ prop: "text-color", redVal: "#ffffff" })
+        changes.push({ prop: "text-halo-color", redVal: "rgba(0,0,0,0.8)" })
+      } else if (t === "fill-extrusion") {
+        changes.push({ prop: "fill-extrusion-color", redVal: "#2a1010" })
+      }
+
+      if (changes.length === 0) continue
+
+      for (const { prop, redVal } of changes) {
+        const key = `${id}::${prop}`
+        if (red) {
+          if (!origColors.current.has(key)) {
+            origColors.current.set(key, { prop, val: l.paint?.[prop] ?? null })
+          }
+          try { map.setPaintProperty(id, prop, redVal) } catch {}
+        } else {
+          const orig = origColors.current.get(key)
+          if (orig?.val != null) {
+            try { map.setPaintProperty(id, orig.prop, orig.val) } catch {}
+          }
+        }
+      }
+    }
+  }, [])
+
+  // Map tile hover — red filter on canvas + border shake
+  const onMapEnter = useCallback(() => {
+    mapContainerRef.current?.parentElement?.classList.add("map-hovered")
+    setMapRed(true)
+    const el = mapShardEl.current
+    if (!el) return
+    el.classList.add("is-hovered")
+    gsap.to(el, {
+      keyframes: [
+        { x: -2, y: 1, rotation: -0.4, duration: 0.06 },
+        { x: 2, y: -1, rotation: 0.4, duration: 0.06 },
+        { x: -1, y: 0, rotation: -0.2, duration: 0.06 },
+        { x: 1, y: 1, rotation: 0.2, duration: 0.06 },
+        { x: 0, y: 0, rotation: 0, duration: 0.06 },
+      ],
+      repeat: -1, ease: "none",
+    })
+  }, [setMapRed])
+  const onMapLeave = useCallback(() => {
+    mapContainerRef.current?.parentElement?.classList.remove("map-hovered")
+    setMapRed(false)
+    const el = mapShardEl.current
+    if (!el) return
+    el.classList.remove("is-hovered")
+    gsap.killTweensOf(el)
+    gsap.to(el, { x: 0, y: 0, rotation: 0, duration: 0.15 })
+  }, [setMapRed])
+
+  // Hover handlers — activate ALL tiles belonging to the same nav item
+  const onEnter = useCallback((navIdx: number) => {
+    NAV_FLAT.forEach((f, fi) => {
+      if (f.navIdx !== navIdx) return
+      const el = navEls.current[fi]
+      if (!el) return
+      el.classList.add("is-hovered")
+      gsap.to(el, {
+        keyframes: [
+          { x: -2, y: 1, rotation: -0.4, duration: 0.06 },
+          { x: 2, y: -1, rotation: 0.4, duration: 0.06 },
+          { x: -1, y: 0, rotation: -0.2, duration: 0.06 },
+          { x: 1, y: 1, rotation: 0.2, duration: 0.06 },
+          { x: 0, y: 0, rotation: 0, duration: 0.06 },
+        ],
+        repeat: -1, ease: "none",
       })
     })
-    return () => {
-      cancelled = true; mapRef.current?.remove(); mapRef.current = null
-    }
-  }, [geojsonData, drawPinImage, togglePin])
-
-  // Sync visitor pins
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapReady) return
-    try {
-      map.setLayoutProperty("pins-layer", "visibility", showVisitorPins ? "none" : "visible")
-    } catch { return }
-    try {
-      map.setLayoutProperty("visitor-pins-layer", "visibility", showVisitorPins && visitorPins.length > 0 ? "visible" : "none")
-    } catch { return } // layer not yet re-added after style switch
-    if (!showVisitorPins) return
-    if (visitorPins.length === 0) {
-      map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features: [] } as unknown as object)
-      return
-    }
-    const registerAndRender = async () => {
-      const features: object[] = []
-      for (const vp of visitorPins) {
-        const imgId = `vpin-${vp.id}`
-        if (!map.hasImage(imgId)) {
-          const vw = 52, vh = 52
-          const c = document.createElement("canvas"); c.width = vw + 12; c.height = vh + 10
-          const ctx = c.getContext("2d")!; const ox = 4, oy = 2
-          ctx.save()
-          ctx.shadowColor = "rgba(0,0,0,0.22)"; ctx.shadowBlur = 5; ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 3
-          const bodyGrad = ctx.createLinearGradient(ox, oy, ox, oy + vh)
-          bodyGrad.addColorStop(0, "#fef08a"); bodyGrad.addColorStop(0.5, "#fde047"); bodyGrad.addColorStop(1, "#facc15")
-          ctx.fillStyle = bodyGrad; ctx.fillRect(ox, oy, vw, vh); ctx.restore()
-          const img = new Image(); img.src = vp.pixel_art
-          await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res() })
-          ctx.save(); ctx.beginPath(); ctx.rect(ox + 6, oy + 6, vw - 12, vh - 12); ctx.clip()
-          ctx.imageSmoothingEnabled = false; ctx.drawImage(img, ox + 6, oy + 6, vw - 12, vh - 12); ctx.restore()
-          const d = ctx.getImageData(0, 0, c.width, c.height)
-          map.addImage(imgId, { width: c.width, height: c.height, data: new Uint8Array(d.data.buffer) })
-        }
-        features.push({ type: "Feature", geometry: { type: "Point", coordinates: [vp.lng, vp.lat] }, properties: { icon: `vpin-${vp.id}` } })
-      }
-      map.getSource("visitor-pins")?.setData({ type: "FeatureCollection", features } as unknown as object)
-      try { map.setLayoutProperty("visitor-pins-layer", "visibility", features.length > 0 ? "visible" : "none") } catch {}
-    }
-    registerAndRender()
-  }, [showVisitorPins, visitorPins, mapReady])
-
-  ////// Render //////////////////////////////////
-
-  const expandedPinData = expandedPin ? PINS.find(p => p.id === expandedPin) : null
-
-  useEffect(() => {
-    setSheetOffsetY(0)
-    sheetStartYRef.current = null
-    sheetDraggingRef.current = false
-    sheetCanDragRef.current = false
-    sheetOffsetRef.current = 0
-  }, [expandedPin])
-
-  const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    sheetStartYRef.current = e.touches[0].clientY
-    const target = e.target as HTMLElement
-    const fromGrabber = !!target.closest(".mobile-detail-grabber")
-    const atTop = (sheetScrollRef.current?.scrollTop ?? 0) <= 0
-    sheetCanDragRef.current = fromGrabber || atTop
-    sheetDraggingRef.current = sheetCanDragRef.current
   }, [])
-
-  const handleSheetTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (!sheetDraggingRef.current || !sheetCanDragRef.current || sheetStartYRef.current === null) return
-    const delta = e.touches[0].clientY - sheetStartYRef.current
-    if (delta <= 0) {
-      setSheetOffsetY(0)
-      sheetOffsetRef.current = 0
-      return
-    }
-    e.preventDefault()
-    const next = Math.min(380, delta)
-    setSheetOffsetY(next)
-    sheetOffsetRef.current = next
-  }, [])
-
-  const handleSheetTouchEnd = useCallback(() => {
-    if (!sheetDraggingRef.current) return
-    sheetDraggingRef.current = false
-    sheetCanDragRef.current = false
-    sheetStartYRef.current = null
-
-    if (sheetOffsetRef.current > 120 && expandedPin) {
-      togglePin(expandedPin)
-      return
-    }
-
-    setSheetOffsetY(0)
-    sheetOffsetRef.current = 0
-  }, [expandedPin, togglePin])
-
-  return (
-    <div className="app">
-      <div className="topbar" style={{ position: "relative", overflow: "hidden" }}>
-        <TopbarSurfAnimation trigger={headerAnimTrigger} />
-        <div style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center" }}>
-          <TopbarAnimatedLogo onActivate={() => setHeaderAnimTrigger((prev) => prev + 1)} />
-        </div>
-        <span className="topbar-title" style={{ position: "relative", zIndex: 2 }}>Evan Maps</span>
-        <span className="topbar-subtitle" style={{ position: "relative", zIndex: 2 }}>evan-huang.dev</span>
-      </div>
-
-      <div className="main">
-        <aside className="sidebar">
-
-          {/* ── Expanded detail ── */}
-          <div className="sidebar-panel sidebar-panel--expanded" style={{ transform: expandedPin ? "translateX(0)" : "translateX(-100%)", opacity: expandedPin ? 1 : 0, pointerEvents: expandedPin ? "auto" : "none" }}>
-            {expandedPinData && (
-              <>
-                <div className="sidebar-scroll">
-                  <div style={{ padding: "0.75rem 1rem 0" }}>
-                    <button onClick={() => togglePin(expandedPin!)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
-                      ‹ back
-                    </button>
-                    {expandedPin === "evan" ? (
-                      /* Full-width photo for Evan */
-                      <div style={{ marginBottom: "0.75rem" }}>
-                        <div style={{
-                          width: "100%", aspectRatio: "1", borderRadius: 8,
-                          overflow: "hidden", background: "#0a84ff",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          marginBottom: "0.6rem",
-                        }}>
-                          <img src="/pins/evan.jpg" alt="Evan Huang"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                        </div>
-                        <div className="hero-name" style={{ fontSize: "1.1rem" }}>Evan Huang</div>
-                        <div className="hero-sub">Oakville, ON · Mathematics · UWaterloo</div>
-                      </div>
-                    ) : (
-                      /* Small avatar + name for others */
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-                        <PinAvatar pin={expandedPinData} size={48} />
-                        <div>
-                          <div className="hero-name">{expandedPinData.label}</div>
-                          <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {expandedPin === "evan" && <EvanDetail />}
-                  {expandedPin === "uow" && <UoWDetail />}
-                  {expandedPin === "blackberry" && <ExperienceDetail job={siteConfig.experience[0]} />}
-                  {expandedPin === "compugen" && <ExperienceDetail job={siteConfig.experience[1]} />}
-                  {expandedPin === "projects" && <ProjectsDetail />}
-                </div>
-                <Clock />
-                <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
-              </>
-            )}
-          </div>
-
-          {/* ── List view ── */}
-          <div className="sidebar-panel sidebar-panel--list" style={{ transform: expandedPin ? "translateX(100%)" : "translateX(0)", opacity: expandedPin ? 0 : 1, pointerEvents: expandedPin ? "none" : "auto" }}>
-            <div className="sidebar-scroll">
-              {/* Hero */}
-              <div className={`hero-card ${activePin === "evan" ? "hero-card--active" : ""}`} onClick={() => togglePin("evan")}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <PinAvatar pin={PINS[0]} size={52} />
-                  <div>
-                    <div className="hero-name">Evan Huang</div>
-                    <div className="hero-sub">Mathematics · UWaterloo<br />Software Dev · Network Infra</div>
-                  </div>
-                </div>
-                <div className="hero-links" style={{ marginTop: "0.75rem" }}>
-                  <a href={siteConfig.links.github} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>github</a>
-                  <a href={`mailto:${siteConfig.links.email}`} className="hero-link" onClick={(e) => e.stopPropagation()}>email</a>
-                  <a href={siteConfig.links.linkedin} target="_blank" rel="noopener noreferrer" className="hero-link" onClick={(e) => e.stopPropagation()}>linkedin</a>
-                  <a href={siteConfig.links.resume} download className="hero-link" onClick={(e) => e.stopPropagation()}>resume</a>
-                </div>
-              </div>
-
-              <div className="sidebar-divider" />
-              <div style={{ padding: "0.5rem 1rem", display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {["Python", "TypeScript", "React", "Node.js", "Next.js", "PostgreSQL", "Supabase", "AWS", "Docker", "Linux"].map((t) => (
-                  <span key={t} className="pin-detail-tag">{t}</span>
-                ))}
-              </div>
-              <div className="sidebar-divider" />
-              <div className="section-label">Education</div>
-              {PINS.filter(p => p.id === "uow").map(pin => (
-                <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
-              ))}
-
-              <div className="sidebar-divider" />
-              <div className="section-label">Experience</div>
-              {PINS.filter(p => p.id === "blackberry" || p.id === "compugen").map(pin => {
-                const job = siteConfig.experience.find(j => j.company.toLowerCase().includes(pin.id === "blackberry" ? "black" : "comp"))
-                return <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} role={job?.role} date={job?.period} />
-              })}
-
-              <div className="sidebar-divider" />
-              <div className="section-label">Projects</div>
-              {PINS.filter(p => p.id === "projects").map(pin => (
-                <PinRow key={pin.id} pin={pin} active={activePin === pin.id} onClick={() => togglePin(pin.id)} />
-              ))}
-            </div>
-            <Clock />
-            <VisitorFooter showPins={showVisitorPins} onToggle={setShowVisitorPins} onPinsLoaded={setVisitorPins} />
-          </div>
-        </aside>
-
-        <div className="map-wrap">
-          <div style={{
-            position: "absolute",
-            top: 10,
-            left: 10,
-            zIndex: 60,
-            background: "rgba(250,247,242,0.95)",
-            border: "0.5px solid var(--ink-faint)",
-            borderRadius: 10,
-            boxShadow: "0 4px 14px rgba(0,0,0,0.1)",
-            padding: "0.5rem",
-            width: "min(360px, calc(100% - 20px))",
-          }}>
-            <form onSubmit={handleRouteSearch} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                value={destinationQuery}
-                onChange={(ev) => {
-                  setDestinationQuery(ev.currentTarget.value)
-                  setSelectedSuggestion(null)
-                }}
-                onFocus={() => setShowSuggestions(routeSuggestions.length > 0)}
-                placeholder="Route from Evan to..."
-                autoComplete="off"
-                style={{
-                  flex: 1,
-                  border: "0.5px solid var(--ink-faint)",
-                  borderRadius: 7,
-                  padding: "0.4rem 0.5rem",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.72rem",
-                  color: "var(--ink)",
-                  background: "#fff",
-                }}
-              />
-              <button
-                type="submit"
-                disabled={routing || destinationQuery.trim().length === 0}
-                style={{
-                  border: "none",
-                  borderRadius: 7,
-                  padding: "0.4rem 0.65rem",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "0.72rem",
-                  background: routing ? "#c8b89a" : "#2a2318",
-                  color: "#f5f0e8",
-                  cursor: routing ? "not-allowed" : "pointer",
-                }}
-              >
-                {routing ? "..." : "route"}
-              </button>
-              {hasRoute && (
-                <button
-                  type="button"
-                  onClick={clearRoute}
-                  aria-label="Clear route"
-                  title="Clear route"
-                  style={{
-                    border: "0.5px solid #d8a7a7",
-                    borderRadius: 7,
-                    padding: "0.24rem 0.55rem",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "0.7rem",
-                    background: "#f4d8d8",
-                    color: "#8c4f4f",
-                    cursor: "pointer",
-                    lineHeight: 1,
-                  }}
-                >
-                  X
-                </button>
-              )}
-            </form>
-            {showSuggestions && routeSuggestions.length > 0 && (
-              <div style={{
-                marginTop: 6,
-                border: "0.5px solid var(--ink-faint)",
-                borderRadius: 7,
-                background: "#fff",
-                maxHeight: 170,
-                overflowY: "auto",
-              }}>
-                {routeSuggestions.map((s) => (
-                  <button
-                    key={`${s.name}-${s.center[0]}-${s.center[1]}`}
-                    type="button"
-                    onClick={() => {
-                      setDestinationQuery(s.name)
-                      setSelectedSuggestion(s)
-                      setShowSuggestions(false)
-                    }}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      border: "none",
-                      borderBottom: "0.5px solid var(--ink-faint)",
-                      background: "transparent",
-                      padding: "0.45rem 0.5rem",
-                      cursor: "pointer",
-                      color: "var(--ink)",
-                      fontSize: "0.7rem",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            {routeStatus && (
-              <div style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: "0.66rem", color: "var(--ink-muted)" }}>
-                {routeStatus}
-              </div>
-            )}
-          </div>
-          <div id="mapbox-container" />
-          {!mapReady && (
-            <div style={{ position: "absolute", inset: 0, background: "#e8e0d4", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "#9a8a72" }}>
-              loading map...
-            </div>
-          )}
-        </div>
-      </div>
-
-      {expandedPinData && (
-        <>
-          <div className="mobile-detail-backdrop" onClick={() => togglePin(expandedPinData.id)} />
-          <div
-            className={`mobile-detail-sheet ${sheetDraggingRef.current ? "dragging" : ""}`}
-            style={{ transform: `translateY(${sheetOffsetY}px)` }}
-            onTouchStart={handleSheetTouchStart}
-            onTouchMove={handleSheetTouchMove}
-            onTouchEnd={handleSheetTouchEnd}
-            onTouchCancel={handleSheetTouchEnd}
-          >
-            <div className="mobile-detail-grabber" />
-            <div className="sidebar-scroll" ref={sheetScrollRef} style={{ paddingBottom: "1rem" }}>
-              <div style={{ padding: "0.75rem 1rem 0" }}>
-                <button onClick={() => togglePin(expandedPinData.id)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "var(--ink-muted)", padding: 0, marginBottom: "0.75rem", display: "flex", alignItems: "center", gap: 4 }}>
-                  ‹ back
-                </button>
-                {expandedPinData.id === "evan" ? (
-                  <div style={{ marginBottom: "0.75rem" }}>
-                    <div style={{
-                      width: "100%", aspectRatio: "1", borderRadius: 8,
-                      overflow: "hidden", background: "#0a84ff",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      marginBottom: "0.6rem",
-                    }}>
-                      <img src="/pins/evan.jpg" alt="Evan Huang"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                    </div>
-                    <div className="hero-name" style={{ fontSize: "1.1rem" }}>Evan Huang</div>
-                    <div className="hero-sub">Oakville, ON · Mathematics · UWaterloo</div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-                    <PinAvatar pin={expandedPinData} size={48} />
-                    <div>
-                      <div className="hero-name">{expandedPinData.label}</div>
-                      <div className="hero-sub" style={{ fontSize: "0.72rem" }}>{expandedPinData.sub}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {expandedPinData.id === "evan" && <EvanDetail />}
-              {expandedPinData.id === "uow" && <UoWDetail />}
-              {expandedPinData.id === "blackberry" && <ExperienceDetail job={siteConfig.experience[0]} />}
-              {expandedPinData.id === "compugen" && <ExperienceDetail job={siteConfig.experience[1]} />}
-              {expandedPinData.id === "projects" && <ProjectsDetail />}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-function TopbarSurfAnimation({ trigger }: { trigger: number }) {
-  const [spriteImage, setSpriteImage] = useState<HTMLImageElement | null>(null)
-  const [frames, setFrames] = useState<SpriteFrame[]>([])
-  const [runs, setRuns] = useState<number[]>([])
-  const nextRunIdRef = useRef(1)
-  const lastTriggerRef = useRef(0)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadSprite = async () => {
-      try {
-        const res = await fetch("/sprites/buizel-surf-header.json")
-        if (!res.ok) throw new Error("header sprite metadata unavailable")
-        const data = await res.json() as {
-          frames?: Record<string, { frame?: { x: number; y: number; w: number; h: number }; duration?: number }>
-        }
-        if (cancelled) return
-
-        const parsedFrames = Object.entries(data.frames ?? {})
-          .sort(([a], [b]) => {
-            const an = Number((a.match(/\d+/)?.[0] ?? "0"))
-            const bn = Number((b.match(/\d+/)?.[0] ?? "0"))
-            return an - bn
-          })
-          .map(([, value]) => ({
-            x: value.frame?.x ?? 0,
-            y: value.frame?.y ?? 0,
-            w: value.frame?.w ?? 768,
-            h: value.frame?.h ?? 16,
-            duration: value.duration ?? 100,
-          }))
-
-        setFrames(parsedFrames)
-
-        const img = new Image()
-        img.onload = () => {
-          if (cancelled) return
-          setSpriteImage(img)
-        }
-        img.src = "/sprites/buizel-surf-header.png"
-      } catch {
-        setFrames([])
-      }
-    }
-
-    loadSprite()
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    if (frames.length === 0 || trigger <= lastTriggerRef.current) return
-
-    const spawnCount = trigger - lastTriggerRef.current
-    lastTriggerRef.current = trigger
-
-    setRuns((prev) => {
-      const spawned = Array.from({ length: spawnCount }, () => nextRunIdRef.current++)
-      return [...prev, ...spawned]
+  const onLeave = useCallback((navIdx: number) => {
+    NAV_FLAT.forEach((f, fi) => {
+      if (f.navIdx !== navIdx) return
+      const el = navEls.current[fi]
+      if (!el) return
+      el.classList.remove("is-hovered")
+      gsap.killTweensOf(el)
+      gsap.to(el, { x: 0, y: 0, rotation: 0, duration: 0.15 })
     })
-  }, [trigger, frames])
-
-  if (frames.length === 0 || !spriteImage) return null
-
-  return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10, display: "flex", alignItems: "stretch" }}>
-      {runs.map((runId) => (
-        <TopbarSurfAnimationRun
-          key={runId}
-          frames={frames}
-          spriteImage={spriteImage}
-          onDone={() => setRuns((prev) => prev.filter((id) => id !== runId))}
-        />
-      ))}
-    </div>
-  )
-}
-
-function TopbarSurfAnimationRun({
-  frames,
-  spriteImage,
-  onDone,
-}: {
-  frames: SpriteFrame[]
-  spriteImage: HTMLImageElement
-  onDone: () => void
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [frameIndex, setFrameIndex] = useState(0)
-  const [finished, setFinished] = useState(false)
-
-  useEffect(() => {
-    if (frames.length === 0 || finished) return
-
-    const duration = Math.max(30, Math.floor((frames[frameIndex]?.duration ?? 100) * 1.2))
-    const timer = setTimeout(() => {
-      if (frameIndex + 1 >= frames.length) {
-        setFinished(true)
-        return
-      }
-      setFrameIndex((prev) => prev + 1)
-    }, duration)
-
-    return () => clearTimeout(timer)
-  }, [frameIndex, frames, finished])
-
-  useEffect(() => {
-    if (!finished) return
-    onDone()
-  }, [finished, onDone])
-
-  useEffect(() => {
-    if (!canvasRef.current) return
-    const ctx = canvasRef.current.getContext("2d")
-    if (!ctx) return
-
-    const frame = frames[frameIndex] ?? frames[0]
-    if (canvasRef.current.width !== frame.w || canvasRef.current.height !== frame.h) {
-      canvasRef.current.width = frame.w
-      canvasRef.current.height = frame.h
-    }
-    ctx.clearRect(0, 0, frame.w, frame.h)
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(spriteImage, frame.x, frame.y, frame.w, frame.h, 0, 0, frame.w, frame.h)
-  }, [spriteImage, frames, frameIndex])
-
-  return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10, display: "flex", alignItems: "stretch" }}>
-      <canvas
-        ref={canvasRef}
-        width={frames[0].w}
-        height={frames[0].h}
-        style={{
-          height: "100%",
-          width: "auto",
-          imageRendering: "pixelated",
-          opacity: 1,
-        }}
-      />
-    </div>
-  )
-}
-
-function TopbarAnimatedLogo({ onActivate }: { onActivate: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [spriteImage, setSpriteImage] = useState<HTMLImageElement | null>(null)
-  const [frames, setFrames] = useState<SpriteFrame[]>([])
-  const [frameIndex, setFrameIndex] = useState(0)
-  const [hovered, setHovered] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadSprite = async () => {
-      try {
-        const res = await fetch("/sprites/buizel-logo.json")
-        if (!res.ok) throw new Error("sprite metadata unavailable")
-        const data = await res.json() as {
-          frames?: Record<string, { frame?: { x: number; y: number; w: number; h: number }; duration?: number }>
-        }
-        if (cancelled) return
-
-        const parsedFrames = Object.entries(data.frames ?? {})
-          .sort(([a], [b]) => {
-            const an = Number((a.match(/\d+/)?.[0] ?? "0"))
-            const bn = Number((b.match(/\d+/)?.[0] ?? "0"))
-            return an - bn
-          })
-          .map(([, value]) => ({
-            x: value.frame?.x ?? 0,
-            y: value.frame?.y ?? 0,
-            w: value.frame?.w ?? 32,
-            h: value.frame?.h ?? 32,
-            duration: value.duration ?? 100,
-          }))
-
-        setFrames(parsedFrames)
-
-        const img = new Image()
-        img.onload = () => {
-          if (cancelled) return
-          setSpriteImage(img)
-        }
-        img.src = "/sprites/buizel-logo.png"
-      } catch {
-        setFrames([])
-      }
-    }
-
-    loadSprite()
-    return () => { cancelled = true }
   }, [])
 
-  useEffect(() => {
-    if (!hovered || frames.length === 0) {
-      setFrameIndex(0)
-      return
-    }
-
-    const duration = Math.max(20, Math.floor((frames[frameIndex]?.duration ?? 100) / 2))
-    const timer = setTimeout(() => {
-      setFrameIndex((prev) => (prev + 1) % frames.length)
-    }, duration)
-
-    return () => clearTimeout(timer)
-  }, [hovered, frameIndex, frames])
-
-  useEffect(() => {
-    if (!canvasRef.current || !spriteImage || frames.length === 0) return
-    const ctx = canvasRef.current.getContext("2d")
-    if (!ctx) return
-
-    const frame = frames[frameIndex] ?? frames[0]
-    ctx.clearRect(0, 0, 32, 32)
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(spriteImage, frame.x, frame.y, frame.w, frame.h, 0, 0, 32, 32)
-  }, [spriteImage, frames, frameIndex])
-
-  if (!spriteImage || frames.length === 0) {
-    return <img src="/favicon.png" alt="icon" onClick={onActivate} style={{ width: 40, height: 40, imageRendering: "pixelated", cursor: "pointer" }} />
-  }
-
   return (
-    <canvas
-      ref={canvasRef}
-      width={32}
-      height={32}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={onActivate}
-      aria-label="logo"
-      style={{ width: 40, height: 40, imageRendering: "pixelated", display: "block", cursor: "pointer" }}
-    />
-  )
-}
+    <div ref={ref} className="home-landing">
+      <svg className="shatter-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+        {INNER_SHARDS.map((p, i) => (
+          <polygon key={`is-${i}`} className="shard-poly shard-inner"
+            points={svgPts(p)} style={{ "--shard-fill": shade(i, 0.015) } as React.CSSProperties} />
+        ))}
+        {OUTER_SHARDS.map((p, i) => (
+          <polygon key={`os-${i}`} className="shard-poly shard-outer"
+            points={svgPts(p)} style={{ "--shard-fill": shade(i + 50, 0.032) } as React.CSSProperties} />
+        ))}
+        {/* Map shard border */}
+        {/* Nav shards — all tiles for all nav items */}
+        {NAV_FLAT.map(({ shard }, fi) => (
+          <polygon key={`ns-${fi}`} ref={el => { navEls.current[fi] = el }}
+            className="shard-poly shard-nav"
+            points={svgPts(shard)}
+            style={{ "--shard-fill": "#0a0a0a" } as React.CSSProperties} />
+        ))}
+        {CRACK_PATHS.map(({ d, cls }, i) => (
+          <path key={`cp-${i}`} className={`crack-path ${cls}`} d={d} fill="none" />
+        ))}
+      </svg>
 
-function PinAvatar({ pin, size = 36 }: { pin: Pin; size?: number }) {
-  const [err, setErr] = useState(false)
-  if (pin.notFound && pin.id !== "projects") {
-    return (
-      <div style={{ width: size, height: size, borderRadius: "50%", background: "#8e8e93", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, flexShrink: 0, position: "relative", overflow: "hidden" }}>
-        <span style={{ filter: "brightness(0) invert(0.5)" }}>📁</span>
-        <div style={{ position: "absolute", inset: -2, borderRadius: "50%", border: "2.5px solid transparent", borderTopColor: "#30b94d", borderRightColor: "#30b94d", animation: "spin 1s linear infinite" }} />
+      {/* Mapbox map masked to shard shape */}
+      <div className="map-shard-layer" style={{
+        WebkitMaskImage: MAP_MASK, maskImage: MAP_MASK,
+        WebkitMaskSize: "100% 100%", maskSize: "100% 100%",
+        WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
+        clipPath: cssClip(MAP_SHARDS[0]),
+      }}
+        onMouseEnter={onMapEnter}
+        onMouseLeave={onMapLeave}
+      >
+        <div ref={mapContainerRef} className="map-shard-canvas" />
       </div>
-    )
-  }
-  return (
-    <div style={{ width: size, height: size, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", overflow: "hidden", flexShrink: 0, background: pin.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45 }}>
-      {!err ? (
-        <img src={`/pins/${pin.id}.jpg`} alt={pin.label} onError={() => setErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      ) : (
-        <span>{pin.emoji}</span>
-      )}
-    </div>
-  )
-}
 
-function PinRow({ pin, active, onClick, role, date }: { pin: Pin; active: boolean; onClick: () => void; role?: string; date?: string }) {
-  return (
-    <div className={`pin-card ${active ? "pin-card--active" : ""}`} onClick={onClick}>
-      <PinAvatar pin={pin} size={36} />
-      <div className="pin-card-body">
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.5rem" }}>
-          <div className="pin-card-name" style={{ flexShrink: 0 }}>{pin.label}</div>
-          {date && <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: "var(--ink-muted)", whiteSpace: "nowrap" }}>{date}</span>}
+      {/* Map shard border (SVG above the map) */}
+      <svg className="map-border-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+        <polygon ref={mapShardEl} className="shard-poly shard-map"
+          points={svgPts(MAP_SHARDS[0])}
+          style={{ "--shard-fill": "transparent" } as React.CSSProperties} />
+      </svg>
+
+      <div className="nav-overlay-layer">
+        {NAV_ITEMS.map(({ href, label, rot, external, icon }, ni) => {
+          const [cx, cy] = NAV_CENTROIDS[ni]
+          const tiles = NAV_FLAT.filter(f => f.navIdx === ni)
+          const labelEl = (
+            <span className="nav-label" style={{
+              left: `${cx / 10}%`, top: `${cy / 10}%`,
+              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+            }}>{icon && <img src={icon} alt="" className="nav-label-icon" />}{label}</span>
+          )
+          const handlers = {
+            onMouseEnter: () => onEnter(ni),
+            onMouseLeave: () => onLeave(ni),
+          }
+          // Render one overlay link per tile so each tile is clickable
+          return tiles.map((t, ti) => {
+            const k = `${href}-${ti}`
+            const sharedProps = {
+              className: "nav-overlay-link",
+              style: { clipPath: cssClip(t.shard) },
+              ...handlers,
+            }
+            return external ? (
+              <a key={k} {...sharedProps} href={href}
+                {...(label === "RESUME" ? { download: true } : { target: "_blank", rel: "noopener noreferrer" })}
+              >{ti === 0 ? labelEl : null}</a>
+            ) : (
+              <Link key={k} {...sharedProps} href={href}>{ti === 0 ? labelEl : null}</Link>
+            )
+          })
+        })}
+      </div>
+
+      <div className="hero-center">
+        <div className="hero-photo">
+          <img src="/pins/evan.jpg" alt="Evan Huang" />
         </div>
-        <div className="pin-card-sub">
-          {pin.notFound ? (
-            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#ff9500", display: "inline-block" }} />
-              
-            </span>
-          ) : role ?? pin.sub}
+        <div className="hero-name-row">
+          <div className="hero-name">
+            <div className="hero-row">
+              <span className="hero-greeting">
+                <span>Hi!</span>
+                <span>I&apos;m</span>
+              </span>
+              <span className="hero-name-first">EVAN</span>
+            </div>
+            <div className="hero-row">
+              <span className="hero-name-last">HUANG</span>
+            </div>
+          </div>
+          <p className="hero-bio">
+            I&apos;m a Canadian full stack dev based in Toronto,
+            outside of tech I also like basketball, soccer and art.
+          </p>
         </div>
       </div>
-      <span className="pin-chevron">›</span>
+
+
     </div>
   )
 }
